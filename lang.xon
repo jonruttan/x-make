@@ -1,0 +1,12 @@
+; lang.xon -- what this bundle IS.
+
+(lang "make")
+
+; RADON: a make that cannot stat, read files, and run recipes is a
+; parser demo.  Deliberately SELF-CONTAINED -- no (requires-lang ...):
+; make is the bootstrap's root tool, and the root depends on nothing.
+(dialect rn)
+
+(requires-release "v0.9.0")
+
+(entry "run.x")
