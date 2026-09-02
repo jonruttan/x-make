@@ -1,5 +1,7 @@
 # x-make
 
+<p align="center"><img src="docs/bitwise-banner.svg" alt="x-make, with Bitwise the owl" width="100%"></p>
+
 A make on x-lang -- the fourth and last tool of the self-hosting arc's
 core set (awk, grep, sed, make).  Deliberately SELF-CONTAINED: make is
 the bootstrap's root tool, so this bundle requires no other lang.
@@ -51,3 +53,5 @@ engine the suite drives directly.
     mk/run.x          the DAG walk, mtimes, recipes
     mk/cli.x          options, overrides, mk-main (the exit)
     tests/            markdown specs + the platform's runner, vendored nowhere
+
+<p align="center"><img src="docs/bitwise-mark.svg" alt="Bitwise" width="96"></p>
