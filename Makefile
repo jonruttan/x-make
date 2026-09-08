@@ -27,6 +27,8 @@ install: ## Install into <share>/langs/make
 	cp -R $(PAYLOAD) "$(DEST)/"
 	printf '%s\n' '$(LANG_VERSION)' > "$(DEST)/version"
 	@echo "x-make: installed to $(DEST)"
+	@echo "x-make: writing the boot image"
+	"$(X)" --image -l make || true
 	@echo "x-make: try  x -l make"
 
 .PHONY: uninstall
