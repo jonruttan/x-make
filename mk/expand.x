@@ -159,10 +159,11 @@
   (fn (_ pat)
     (def end (byte-len pat))
     (def special? (fn (_ b)
-                    (if (= b 46) #t (if (= b 43) #t (if (= b 40) #t
-                      (if (= b 41) #t (if (= b 123) #t (if (= b 125) #t
-                        (if (= b 124) #t (if (= b 94) #t (if (= b 36) #t
-                          (= b 92))))))))))))
+                    (match
+                      ((= b 46) #t)  ((= b 43) #t)  ((= b 40) #t)
+                      ((= b 41) #t)  ((= b 123) #t) ((= b 125) #t)
+                      ((= b 124) #t) ((= b 94) #t)  ((= b 36) #t)
+                      ((= b 92) #t)  (#t #f))))
     (def go
       (fn (self i acc)
         (if (>= i end) (regex-compile (string-concat (reverse acc)))
