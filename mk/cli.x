@@ -62,19 +62,20 @@
           (let ((op (first ops)))
             (if (if (>= (byte-len op) 2) (= (byte-at op 0) 45) #f)
               (let ((b1 (byte-at op 1)))
-                (if (= b1 67)                              ; C
-                  (let ((r (%mk-optarg op ops)))
-                    (self (rest r) (first r) mf dry quiet ovr targets))
-                  (if (= b1 102)                           ; f
+                (match
+                  ((= b1 67)                               ; C
                     (let ((r (%mk-optarg op ops)))
-                      (self (rest r) cwd (first r) dry quiet ovr targets))
-                    (if (= b1 110)                         ; n
-                      (self (rest ops) cwd mf #t quiet ovr targets)
-                      (if (= b1 115)                       ; s
-                        (self (rest ops) cwd mf dry #t ovr targets)
-                        (Err raise (lit make)
-                          (string-append "make: unknown option: " op)
-                          ()))))))
+                      (self (rest r) (first r) mf dry quiet ovr targets)))
+                  ((= b1 102)                              ; f
+                    (let ((r (%mk-optarg op ops)))
+                      (self (rest r) cwd (first r) dry quiet ovr targets)))
+                  ((= b1 110)                              ; n
+                    (self (rest ops) cwd mf #t quiet ovr targets))
+                  ((= b1 115)                              ; s
+                    (self (rest ops) cwd mf dry #t ovr targets))
+                  (#t (Err raise (lit make)
+                        (string-append "make: unknown option: " op)
+                        ()))))
               (if (%mk-assign-op? op)
                 (self (rest ops) cwd mf dry quiet (pair op ovr) targets)
                 (self (rest ops) cwd mf dry quiet ovr
