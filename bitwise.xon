@@ -15,6 +15,6 @@
 ;   (reference "LINE")        one line in this project's own language, on the banner
 
 (costume "x-make"
-  (rows "., .," "{OvO}" "(all)" " \" \"")
+  (rows "., .," "{O,O}" "(all)" " \" \"")
   (roles "ii ii" "ieifi" "iaaai" " i i ")
   (reference "owl: ; echo '{O,O}'"))
