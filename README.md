@@ -22,7 +22,7 @@ Not built, loudly absent rather than wrong: `$(MAKEFILE_LIST)` and the
 other automatic variables beyond the four, suffix rules, `VPATH`,
 parallel `-j`, `define`, `export`, double-colon rules.
 
-Paired with x-lang v0.9.0 (`lang.xon` is the checkable row).
+Paired with x-lang v0.13.0 (`lang.xon` is the checkable row).
 
 ## Try it
 
