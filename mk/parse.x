@@ -76,7 +76,7 @@
                   (self (+ i 1) depth))))))))
     (go 0 0)))
 
-; NAME op VALUE: answers (name kind value) or nil; kinds rec simple
+; NAME op VALUE: answers (name label value) or nil; labels rec simple
 ; cond append
 (def %mk-parse-assign
   (fn (_ s)
@@ -88,15 +88,15 @@
         (if (if (>= colon 0) (< colon (- at 1)) #f)
           ()
           (let ((prev (if (> at 0) (byte-at s (- at 1)) 0)))
-            (def kind
+            (def label
               (if (= prev 58) (lit simple)                  ; :=
                 (if (= prev 63) (lit cond)                  ; ?=
                   (if (= prev 43) (lit append)              ; +=
                     (lit rec)))))
-            (def name-end (if (eq? kind (lit rec)) at (- at 1)))
+            (def name-end (if (eq? label (lit rec)) at (- at 1)))
             (def name (%mk-trim (substring s 0 name-end)))
             (if (= (byte-len name) 0) ()
-              (list name kind
+              (list name label
                 (%mk-trim (substring s (+ at 1) (byte-len s)))))))))))
 
 ; --- conditionals ------------------------------------------------------------
@@ -148,7 +148,7 @@
     (if (null? conds) #t
       (if (first (first conds)) (self (rest conds)) #f))))
 
-; --- one handler per line kind, so the dispatch below stays shallow ---
+; --- one handler per line variant, so the dispatch below stays shallow ---
 
 (def %mk-c-push
   (fn (_ v active conds) (pair (list v v active) conds)))
@@ -254,16 +254,16 @@
                     (%mk-c-recipe line st conds)
                     (%mk-c-bare line st conds)))))))))))
 
-; one assignment, per kind
+; one assignment, per label
 (def %mk-assign!
-  (fn (_ vars name kind text)
-    (if (eq? kind (lit simple))
+  (fn (_ vars name label text)
+    (if (eq? label (lit simple))
       (%mk-var-set! vars name (lit simple) (%mk-expand text vars ()))
-      (if (eq? kind (lit cond))
+      (if (eq? label (lit cond))
         (if (null? (%mk-var-entry vars name))
           (%mk-var-set! vars name (lit rec) text)
           ())
-        (if (eq? kind (lit append))
+        (if (eq? label (lit append))
           (let ((e (%mk-var-entry vars name)))
             (if (null? e)
               (%mk-var-set! vars name (lit rec) text)
