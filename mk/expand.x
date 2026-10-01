@@ -6,7 +6,7 @@
 ; @copyright 2026 Jon Ruttan
 ; @license MIT No Attribution (MIT-0)
 ;
-; The variable table is a BOX of ((name . (KIND . text)) ...): kind rec
+; The variable table is a BOX of ((name . (LABEL . text)) ...): label rec
 ; expands at every use (=), simple expanded once at assignment (:=),
 ; lock a command-line override no file assignment may touch.  The
 ; automatics ($@ $< $^ $*) ride in as an overlay alist checked first.
@@ -131,14 +131,14 @@
 
 ; a file assignment; a lock entry wins over it silently
 (def %mk-var-set!
-  (fn (_ vars name kind text)
+  (fn (_ vars name label text)
     (def e (%mk-var-entry vars name))
     (if (null? e)
-      (set-first! vars (pair (pair name (pair kind text)) (first vars)))
+      (set-first! vars (pair (pair name (pair label text)) (first vars)))
       (if (eq? (first (rest e)) (lit lock))
         ()
         (set-first! vars
-          (pair (pair name (pair kind text))
+          (pair (pair name (pair label text))
             (%mk-var-del (first vars) name)))))))
 
 (def %mk-var-del
