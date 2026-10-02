@@ -15,6 +15,6 @@
 ; The x-lang release this bundle is built and tested against. v0.15.0 is the
 ; floor: mk/prims.x fetches the string type's handle through
 ; (Type named ...), which no earlier release provides.
-(requires-release "v0.17.0")
+(requires-release "v0.19.0")
 
 (entry "run.x")
