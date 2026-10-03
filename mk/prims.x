@@ -13,6 +13,7 @@
 (import x/type/regex)
 (import x/sys/file)
 (import x/sys/proc)
+(import x/sys/opts)
 
 (provide mk/prims
   char->integer integer->char byte-at byte-len
@@ -21,7 +22,8 @@
   regex-compile regex-match
   file-read-all file-write-all file-exists? file-stat-mtime
   file-list-dir file-unlink
-  proc-run proc-capture sys-exit)
+  proc-run proc-capture sys-exit
+  Opts)
 
 (def char->integer (prim-ref (lit char) (lit ->int)))
 (def integer->char (prim-ref (lit int) (lit ->char)))
