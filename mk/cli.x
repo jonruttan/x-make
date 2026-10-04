@@ -7,6 +7,7 @@
 ; @license MIT No Attribution (MIT-0)
 ;
 ;   x -l make -- [-C dir] [-f makefile] [-ns] [VAR=value]... [target]...
+;   x -l make -- --help
 ;
 ; The `--` lets make's own -C/-f/-n/-s through x.sh's parsing; without
 ; it, place options after the first target.  Statuses: 0 built or up to
@@ -27,14 +28,17 @@
       (rest ops)
       ops)))
 
-(def %mk-optarg
-  (fn (_ op ops)
-    (if (> (byte-len op) 2)
-      (pair (substring op 2 (byte-len op)) (rest ops))
-      (if (null? (rest ops))
-        (Err raise (lit make)
-          (string-append "make: option needs an argument: " op) ())
-        (pair (first (rest ops)) (rest (rest ops)))))))
+; The options, declared once: what the parse accepts, what --help prints and
+; what a refusal prints, laid out as busybox lays its help text out.
+(def %mk-options
+  (Opts declare "make"
+    "[-ns] [-C DIR] [-f FILE] [VAR=VALUE]... [TARGET]..."
+    "Bring TARGETs up to date, as a makefile describes them"
+    (list
+      (Opts arg "-C" "DIR" "Change to DIR before reading the makefile")
+      (Opts arg "-f" "FILE" "Read FILE as the makefile")
+      (Opts flag "-n" "Print the commands, run none")
+      (Opts flag "-s" "Run commands without printing them"))))
 
 ; a VAR=value operand: NAME then =
 (def %mk-assign-op?
@@ -52,40 +56,67 @@
                         #f))))))
         (go 0)))))
 
-; ARGV -> ((cwd makefile dry quiet) (overrides) (targets))
+; ARGV -> ((cwd makefile dry quiet) (overrides) (targets)), or nil when an
+; option make does not take is on the line.  Options may come anywhere among
+; the operands, as GNU's make takes them; a -C or -f given twice keeps the
+; last.
 (def mk-parse-cli
-  (fn (_ operands)
+  (fn (_ argv)
+    (def o (Opts parse %mk-options argv))
+    (def split
+      (fn (self ops ovr targets)
+        (match
+          ((null? ops) (list (reverse ovr) (reverse targets)))
+          ((%mk-assign-op? (first ops)) (self (rest ops) (pair (first ops) ovr) targets))
+          (#t (self (rest ops) ovr (pair (first ops) targets))))))
+    (if (not (null? (Opts unknown o))) ()
+      (let ((s (split (Opts operands o) () ())))
+        (list (list (Opts value o "-C" "") (Opts value o "-f")
+                    (Opts on? o "-n") (Opts on? o "-s"))
+              (first s) (first (rest s)))))))
+
+; The line refused: musl getopt's words for the option, as every bundle here
+; refuses one, then the usage text, on standard error, and 2 -- make's trouble.
+(def %mk-refuse
+  (fn (_ tok)
+    (do (file-write-all "/dev/stderr"
+          (string-concat (list "make: " (%mk-refusal tok) "\n" (Opts usage %mk-options))))
+        2)))
+
+; What is wrong with TOK: in a short cluster, read left to right, the first
+; letter make does not take is unrecognized, and -C or -f with nothing after
+; it requires an argument; a long option is named without its dashes.
+(def %mk-refusal
+  (fn (_ tok)
+    (def end (byte-len tok))
+    (def member?
+      (fn (self s l) (if (null? l) #f (if (string=? (first l) s) #t (self s (rest l))))))
     (def go
-      (fn (self ops cwd mf dry quiet ovr targets)
-        (if (null? ops)
-          (list (list cwd mf dry quiet) (reverse ovr) (reverse targets))
-          (let ((op (first ops)))
-            (if (if (>= (byte-len op) 2) (= (byte-at op 0) 45) #f)
-              (let ((b1 (byte-at op 1)))
-                (match
-                  ((= b1 67)                               ; C
-                    (let ((r (%mk-optarg op ops)))
-                      (self (rest r) (first r) mf dry quiet ovr targets)))
-                  ((= b1 102)                              ; f
-                    (let ((r (%mk-optarg op ops)))
-                      (self (rest r) cwd (first r) dry quiet ovr targets)))
-                  ((= b1 110)                              ; n
-                    (self (rest ops) cwd mf #t quiet ovr targets))
-                  ((= b1 115)                              ; s
-                    (self (rest ops) cwd mf dry #t ovr targets))
-                  (#t (Err raise (lit make)
-                        (string-append "make: unknown option: " op)
-                        ()))))
-              (if (%mk-assign-op? op)
-                (self (rest ops) cwd mf dry quiet (pair op ovr) targets)
-                (self (rest ops) cwd mf dry quiet ovr
-                  (pair op targets))))))))
-    (go operands "" () #f #f () ())))
+      (fn (self i)
+        (let ((opt (string-append "-" (substring tok i (+ i 1)))))
+          (match
+            ((>= i end) (string-append "unrecognized option: " (substring tok 1 end)))
+            ((member? opt (Opts valued %mk-options))
+              (string-append "option requires an argument: " (substring tok i (+ i 1))))
+            ((member? opt (Opts flags %mk-options)) (self (+ i 1)))
+            (#t (string-append "unrecognized option: " (substring tok i (+ i 1))))))))
+    (if (if (> end 2) (= (byte-at tok 1) #\-) #f)
+      (string-append "unrecognized option: " (substring tok 2 end))
+      (go 1))))
 
 ; the pure-ish core the specs drive: argv in, output out, status back
 (def mk-run
   (fn (_ argv)
-    (def plan (mk-parse-cli argv))
+    (match
+      ((Opts help? %mk-options argv)
+        (do (display (Opts usage %mk-options)) 0))
+      ((null? (mk-parse-cli argv))
+        (%mk-refuse (Opts unknown (Opts parse %mk-options argv))))
+      (#t (%mk-run-plan (mk-parse-cli argv))))))
+
+; the run itself, once the line has parsed
+(def %mk-run-plan
+  (fn (_ plan)
     (def opts (first plan))
     (def ovr (first (rest plan)))
     (def targets (first (rest (rest plan))))
