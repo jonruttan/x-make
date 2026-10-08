@@ -83,3 +83,19 @@
 (def proc-run (fn (_ argv) (Proc run! argv)))
 (def proc-capture (fn (_ argv) (Proc capture argv)))
 (def sys-exit (fn (_ n) (Sys exit n)))
+
+; Expansion, words, lines and the top-level splits are cut by the platform's
+; lexer (x/reader/lexer): tokenizer bases made from data rules, their
+; analysers native code.  mk/expand.x makes each once and keeps it.  A nested
+; span or a word still open at the end of the text is a token all the same.
+(import x/reader/lexer)
+(def lexer-make (fn (_ rules end) (Lexer make rules end)))
+(def lexer-run (fn (_ tag opens continues) (Lexer run tag opens continues)))
+(def lexer-skip (fn (_ class) (Lexer skip class)))
+(def lexer-table (fn (_ tag strings) (Lexer table tag strings)))
+(def lexer-escape (fn (_ tag byte) (Lexer escape tag byte)))
+(def lexer-nested
+  (fn (_ tag open start contexts) (Lexer nested tag open start contexts (lit to-end))))
+(def lexer-word
+  (fn (_ tag start contexts stop) (Lexer word tag start contexts stop (lit to-end))))
+(def lexer-read (fn (_ l s) (l read-str s)))

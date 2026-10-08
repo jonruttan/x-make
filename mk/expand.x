@@ -47,16 +47,112 @@
              (go end)))
     (substring s a b)))
 
-(def %mk-words-go
-  (fn (self s end i start acc)
-    (if (>= i end)
-      (reverse (if (> i start) (pair (substring s start i) acc) acc))
-      (if (%mk-ws? (byte-at s i))
-        (self s end (+ i 1) (+ i 1)
-          (if (> i start) (pair (substring s start i) acc) acc))
-        (self s end (+ i 1) start acc)))))
+; --- the lexers --------------------------------------------------------------
+;
+; Every scan of text here -- the $-references of an expansion, the words of
+; a list, an argument list split at its top-level commas, a rule line split
+; at its first top-level colon, a makefile folded into lines -- was a byte
+; walk in x at 40 to 80 us a byte.  Each is a rule set the platform's lexer
+; reads as native code (mk/prims.x's lexer seam), made on first use and kept.
+; What the rules leave to the walk over the tokens: an empty piece between
+; two separators, and whether a separator closed the last piece.
+;
+; The end text appended to every read is chosen outside the run rule's class
+; so that it ends a run and is itself no token: $ for an expansion, the
+; separator for a split, a newline for lines.
+
+(def %mk-lx-expand-cell (pair () ()))
+(def %mk-lx-words-cell (pair () ()))
+(def %mk-lx-splits (pair () ()))     ; ((BYTE . LEXER) ...)
+(def %mk-lx-lines-cell (pair () ()))
+
+; every byte but B, high bytes either way the engine hands them over
+(def %mk-class-but
+  (fn (_ b) (list (pair 0 (- b 1)) (pair (+ b 1) 255) (pair -128 -1))))
+
+(def %mk-nonblank
+  (list (pair 0 8) (pair 11 31) (pair 33 255) (pair -128 -1)))
+
+; $$, $(...) and ${...} with their own kind of bracket nested inside, $X,
+; and a run of anything else; a reference left open runs to the end
+(def %mk-lx-expand
+  (fn (_)
+    (if (null? (first %mk-lx-expand-cell))
+      (set-first! %mk-lx-expand-cell
+        (lexer-make
+          (list
+            (lexer-table (lit dd) (list "$$"))
+            (lexer-nested (lit ref) "$(" (lit p)
+              (list (list (lit p) 41 () (list (pair "(" (lit p))))))
+            (lexer-nested (lit bref) "${" (lit b)
+              (list (list (lit b) 125 () (list (pair "{" (lit b))))))
+            (lexer-escape (lit one) 36)
+            (lexer-run (lit txt) (%mk-class-but 36) (%mk-class-but 36)))
+          "$"))
+      ())
+    (first %mk-lx-expand-cell)))
+
+(def %mk-lx-words
+  (fn (_)
+    (if (null? (first %mk-lx-words-cell))
+      (set-first! %mk-lx-words-cell
+        (lexer-make
+          (list (lexer-skip " \t\n")
+                (lexer-run (lit w) %mk-nonblank %mk-nonblank))
+          " "))
+      ())
+    (first %mk-lx-words-cell)))
+
+; a split at the byte B wherever it is outside parentheses and braces: the
+; separator, and a word that ends before one at depth 0
+(def %mk-lx-split-find
+  (fn (self b l)
+    (if (null? l) ()
+      (if (= (first (first l)) b) (rest (first l)) (self b (rest l))))))
+(def %mk-lx-split
+  (fn (_ b)
+    (let ((hit (%mk-lx-split-find b (first %mk-lx-splits))))
+      (if (null? hit)
+        (let ((sep (%mk-b->s b)))
+          (let ((l (lexer-make
+                     (list
+                       (lexer-table (lit sep) (list sep))
+                       (lexer-word (lit w) (lit a)
+                         (list
+                           (list (lit a) () () (list (pair "(" (lit p)) (pair "{" (lit b))))
+                           (list (lit p) 41 () (list (pair "(" (lit p))))
+                           (list (lit b) 125 () (list (pair "{" (lit b)))))
+                         sep))
+                     sep)))
+            (set-first! %mk-lx-splits (pair (pair b l) (first %mk-lx-splits)))
+            l))
+        hit))))
+
+; the pieces of a text between its separators, from the tokens: (PIECES .
+; CLOSED?), CLOSED? when a separator ended the last one; a separator with
+; nothing pending is an empty piece
+(def %mk-pieces-go
+  (fn (self ts pending acc)
+    (if (null? ts)
+      (if (null? pending)
+        (pair (reverse acc) #t)
+        (pair (reverse (pair pending acc)) #f))
+      (if (eq? (first (first ts)) (lit sep))
+        (self (rest ts) () (pair (if (null? pending) "" pending) acc))
+        (self (rest ts) (first (rest (first ts))) acc)))))
+(def %mk-pieces
+  (fn (_ ts) (%mk-pieces-go ts () ())))
+
+; the texts of a run of tokens that has no separators
+(def %mk-run-texts
+  (fn (self ts acc)
+    (if (null? ts) (reverse acc)
+      (self (rest ts) (pair (first (rest (first ts))) acc)))))
+
 (def %mk-words
-  (fn (_ s) (%mk-words-go s (byte-len s) 0 0 ())))
+  (fn (_ s)
+    (if (= (byte-len s) 0) ()
+      (%mk-run-texts (lexer-read (%mk-lx-words) s) ()))))
 
 (def %mk-join
   (fn (self ws sep)
@@ -229,24 +325,12 @@
             (%mk-expand (rest (rest e)) vars autos)
             (rest (rest e))))))))
 
-; split an argument string on top-level commas (paren/brace aware)
+; split an argument string on top-level commas (paren/brace aware): a comma
+; at the end opens an empty last argument, and an empty string is one
 (def %mk-args
   (fn (_ s)
-    (def end (byte-len s))
-    (def go
-      (fn (self i depth start acc)
-        (if (>= i end)
-          (reverse (pair (substring s start end) acc))
-          (let ((b (byte-at s i)))
-            (if (if (= b 40) #t (= b 123))
-              (self (+ i 1) (+ depth 1) start acc)
-              (if (if (= b 41) #t (= b 125))
-                (self (+ i 1) (- depth 1) start acc)
-                (if (if (= b 44) (= depth 0) #f)
-                  (self (+ i 1) depth (+ i 1)
-                    (pair (substring s start i) acc))
-                  (self (+ i 1) depth start acc))))))))
-    (go 0 0 0 ())))
+    (let ((cut (%mk-pieces (lexer-read (%mk-lx-split 44) s))))
+      (if (rest cut) (append (first cut) (list "")) (first cut)))))
 
 (def %mk-fn-name?
   (fn (_ s nm)
@@ -381,41 +465,38 @@
             (%mk-subst "%" stem repl))
           w)))))
 
-; the scanner: text with $-references to text without
+; the inner text of a reference token: $( or ${ off the front, and the
+; closer off the end where one closed it -- a reference left open at the
+; end of the text runs to the end, as GNU reads it
+(def %mk-ref-inner
+  (fn (_ tx closer)
+    (def end (byte-len tx))
+    (if (if (> end 2) (= (byte-at tx (- end 1)) closer) #f)
+      (substring tx 2 (- end 1))
+      (substring tx 2 end))))
+
+; a one-character reference token: $X, $@, $<, $^, $*; a $ alone at the end
+; of the text is itself
+(def %mk-one
+  (fn (_ tx vars autos)
+    (if (< (byte-len tx) 2) tx
+      (%mk-lookup (substring tx 1 2) vars autos))))
+
+; the scanner: text with $-references to text without, token by token
 (set! %mk-expand
   (fn (_ text vars autos)
-    (def end (byte-len text))
     (def go
-      (fn (self i acc)
-        (if (>= i end) (string-concat (reverse acc))
-          (let ((b (byte-at text i)))
-            (if (not (= b 36))                              ; $
-              (self (+ i 1) (pair (%mk-b->s b) acc))
-              (if (>= (+ i 1) end)
-                (string-concat (reverse (pair "$" acc)))
-                (let ((n (byte-at text (+ i 1))))
-                  (if (= n 36)                              ; $$
-                    (self (+ i 2) (pair "$" acc))
-                    (if (if (= n 40) #t (= n 123))          ; $( ${
-                      (let ((close (if (= n 40) 41 125)))
-                        (def open n)
-                        (def scan
-                          (fn (self2 j depth)
-                            (if (>= j end) j
-                              (let ((c (byte-at text j)))
-                                (if (= c open) (self2 (+ j 1) (+ depth 1))
-                                  (if (= c close)
-                                    (if (= depth 0) j
-                                      (self2 (+ j 1) (- depth 1)))
-                                    (self2 (+ j 1) depth)))))))
-                        (def endp (scan (+ i 2) 0))
-                        (self (+ endp 1)
-                          (pair
-                            (%mk-inner (substring text (+ i 2) endp)
-                              vars autos)
-                            acc)))
-                      ; single-character reference: $X, $@, $<, $^, $*
-                      (self (+ i 2)
-                        (pair (%mk-lookup (%mk-b->s n) vars autos)
-                          acc)))))))))))
-    (go 0 ())))
+      (fn (self ts acc)
+        (if (null? ts) (string-concat (reverse acc))
+          (let ((tag (first (first ts))) (tx (first (rest (first ts)))))
+            (self (rest ts)
+              (pair
+                (match
+                  ((eq? tag (lit txt)) tx)
+                  ((eq? tag (lit dd)) "$")
+                  ((eq? tag (lit one)) (%mk-one tx vars autos))
+                  ((eq? tag (lit ref)) (%mk-inner (%mk-ref-inner tx 41) vars autos))
+                  (#t (%mk-inner (%mk-ref-inner tx 125) vars autos)))
+                acc))))))
+    (if (= (byte-len text) 0) text
+      (go (lexer-read (%mk-lx-expand) text) ()))))

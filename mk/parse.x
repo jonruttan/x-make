@@ -20,29 +20,41 @@
 ; where cur = (targets prereqs recipes-rev); finishing a rule pushes
 ; it.  Conditional stack entries: (taking? seen-true? parent-active?).
 
-; fold backslash-newline continuations into single lines
+; The lines of a makefile: a backslash-newline joins with a single space,
+; any other backslash and the byte after it stand (so a doubled backslash
+; before a newline is no continuation), and a last line nothing ended is a
+; line when it has bytes.
+(def %mk-lx-lines
+  (fn (_)
+    (if (null? (first %mk-lx-lines-cell))
+      (set-first! %mk-lx-lines-cell
+        (lexer-make
+          (list
+            (lexer-table (lit cont) (list "\\\n"))
+            (lexer-table (lit nl) (list "\n"))
+            (lexer-escape (lit esc) 92)
+            (lexer-run (lit txt)
+              (list (pair 0 9) (pair 11 91) (pair 93 255) (pair -128 -1))
+              (list (pair 0 9) (pair 11 91) (pair 93 255) (pair -128 -1))))
+          "\n"))
+      ())
+    (first %mk-lx-lines-cell)))
+
+(def %mk-fold-go
+  (fn (self ts cur acc)
+    (if (null? ts)
+      (reverse (if (null? cur) acc (pair (string-concat (reverse cur)) acc)))
+      (let ((tag (first (first ts))))
+        (match
+          ((eq? tag (lit nl))
+            (self (rest ts) () (pair (string-concat (reverse cur)) acc)))
+          ((eq? tag (lit cont)) (self (rest ts) (pair " " cur) acc))
+          (#t (self (rest ts) (pair (first (rest (first ts))) cur) acc)))))))
+
 (def %mk-fold-lines
   (fn (_ text)
-    (def end (byte-len text))
-    (def go
-      (fn (self i start acc cur)
-        (if (>= i end)
-          (reverse
-            (let ((last (string-concat
-                          (reverse (pair (substring text start i) cur)))))
-              (if (= (byte-len last) 0) acc (pair last acc))))
-          (if (= (byte-at text i) 10)
-            (if (if (> i start) (= (byte-at text (- i 1)) 92) #f)
-              ; backslash-newline: joins with a single space
-              (self (+ i 1) (+ i 1) acc
-                (pair " " (pair (substring text start (- i 1)) cur)))
-              (self (+ i 1) (+ i 1)
-                (pair (string-concat
-                        (reverse (pair (substring text start i) cur)))
-                  acc)
-                ()))
-            (self (+ i 1) start acc cur)))))
-    (go 0 0 () ())))
+    (if (= (byte-len text) 0) ()
+      (%mk-fold-go (lexer-read (%mk-lx-lines) text) () ()))))
 
 ; the # comment strips from an UNQUOTED position (recipes keep theirs)
 (def %mk-strip-comment
@@ -59,22 +71,15 @@
           (%mk-ws? (byte-at s lw)))
         #f))))
 
-; the first : that is outside $(...) -- a rule line's split point
+; the first : that is outside $(...) -- a rule line's split point, or -1:
+; the length of the first piece of the split at :, when a : followed it
 (def %mk-rule-colon
   (fn (_ s)
-    (def end (byte-len s))
-    (def go
-      (fn (self i depth)
-        (if (>= i end) (- 0 1)
-          (let ((b (byte-at s i)))
-            (if (if (= b 40) #t (= b 123))
-              (self (+ i 1) (+ depth 1))
-              (if (if (= b 41) #t (= b 125))
-                (self (+ i 1) (- depth 1))
-                (if (if (= b 58) (= depth 0) #f)
-                  i
-                  (self (+ i 1) depth))))))))
-    (go 0 0)))
+    (if (= (byte-len s) 0) (- 0 1)
+      (let ((cut (%mk-pieces (lexer-read (%mk-lx-split 58) s))))
+        (if (if (rest cut) #t (pair? (rest (first cut))))
+          (byte-len (first (first cut)))
+          (- 0 1))))))
 
 ; NAME op VALUE: answers (name label value) or nil; labels rec simple
 ; cond append
