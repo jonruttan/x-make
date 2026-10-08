@@ -124,6 +124,17 @@ zed: a.c b.c
 0
 ```
 
+### a backslash-newline joins lines with one space; a doubled backslash does not
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.cont" "W = one \\\n    two \\\n  three\nV = back\\\\\nshow:\n\t@echo [$(W)] [$(V)]\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.cont" "show"))))
+```
+---
+```output
+[one two three] [back\]
+0
+```
+
 ### cleanup
 
 ```make

@@ -93,3 +93,29 @@ The expansion engine, pure: a vars box, text in, text out.
 ```
 ---
     one two
+
+## the scanner's edges
+
+### a dollar alone at the end stands, and a reference left open runs to the end
+
+```make
+(do (def v (list ())) (%mk-var-set! v "X" (lit rec) "x") (display (%mk-expand "a$" v ())) (display "|") (display (%mk-expand "a$(X" v ())) (display "|") (display (%mk-expand "a${X" v ())))
+```
+---
+    a$|ax|ax
+
+### parentheses nest inside a reference, and braces inside a brace reference
+
+```make
+(do (def v (list ())) (%mk-var-set! v "Y" (lit rec) "y") (display (%mk-expand "[$(if $(Y),$(subst a,b,(a)),no)] [${Y}]" v ())))
+```
+---
+    [(b)] [y]
+
+### an argument list splits at top-level commas only, a last comma opening an empty argument
+
+```make
+(do (write (%mk-args "a,$(b,c),(d,e)")) (write (%mk-args "a,")) (write (%mk-args "")))
+```
+---
+    ("a" "$(b,c)" "(d,e)")("a" "")("")
