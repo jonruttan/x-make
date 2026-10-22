@@ -13,37 +13,46 @@
 ;
 ; Functions carried: shell wildcard findstring if subst patsubst
 ; basename dir notdir strip -- the set the measured Makefiles use, plus
-; the trivial siblings.  $(shell) and $(wildcard) honour %mk-cwd, the
+; the trivial siblings.  $(shell) and $(wildcard) honour mk-cwd, the
 ; -C prefix (there is no chdir anywhere in this bundle: commands run
 ; under `cd PREFIX &&` and paths join it).
 
-(def %mk-cwd "")   ; the -C prefix, "" for here; set by the CLI
+(module mk/expand)
+(import mk/prims
+  append byte-at byte-len file-exists? file-list-dir filter
+  integer->char lexer-escape lexer-make lexer-nested lexer-read
+  lexer-run lexer-skip lexer-table lexer-word list->string map
+  proc-capture regex-compile regex-match reverse set-first!
+  string-append string-concat string=? substring)
+(def %mk-cwd "")
+(def mk-cwd (fn (_) %mk-cwd))                 ; read by every module
+(def mk-cwd! (fn (_ v) (set! %mk-cwd v) ()))   ; set by the command line
 
-(def %mk-path
+(def mk-path
   (fn (_ rel)
-    (if (= (byte-len %mk-cwd) 0) rel
+    (if (= (byte-len (mk-cwd)) 0) rel
       (if (if (> (byte-len rel) 0) (= (byte-at rel 0) 47) #f)
         rel
-        (string-append %mk-cwd (string-append "/" rel))))))
+        (string-append (mk-cwd) (string-append "/" rel))))))
 
 ; --- small text helpers (bytes, module-level) --------------------------------
 
 (def %mk-b->s
   (fn (_ b) (list->string (list (integer->char b)))))
 
-(def %mk-ws?
+(def mk-ws?
   (fn (_ b) (if (= b 32) #t (if (= b 9) #t (= b 10)))))
 
-(def %mk-trim
+(def mk-trim
   (fn (_ s)
     (def end (byte-len s))
     (def a (let ((go (fn (self i)
                        (if (>= i end) i
-                         (if (%mk-ws? (byte-at s i)) (self (+ i 1)) i)))))
+                         (if (mk-ws? (byte-at s i)) (self (+ i 1)) i)))))
              (go 0)))
     (def b (let ((go (fn (self i)
                        (if (<= i a) i
-                         (if (%mk-ws? (byte-at s (- i 1))) (self (- i 1)) i)))))
+                         (if (mk-ws? (byte-at s (- i 1))) (self (- i 1)) i)))))
              (go end)))
     (substring s a b)))
 
@@ -64,7 +73,7 @@
 (def %mk-lx-expand-cell (pair () ()))
 (def %mk-lx-words-cell (pair () ()))
 (def %mk-lx-splits (pair () ()))     ; ((BYTE . LEXER) ...)
-(def %mk-lx-lines-cell (pair () ()))
+(def mk-lx-lines-cell (pair () ()))
 
 ; every byte but B, high bytes either way the engine hands them over
 (def %mk-class-but
@@ -109,7 +118,7 @@
   (fn (self b l)
     (if (null? l) ()
       (if (= (first (first l)) b) (rest (first l)) (self b (rest l))))))
-(def %mk-lx-split
+(def mk-lx-split
   (fn (_ b)
     (let ((hit (%mk-lx-split-find b (first %mk-lx-splits))))
       (if (null? hit)
@@ -140,7 +149,7 @@
       (if (eq? (first (first ts)) (lit sep))
         (self (rest ts) () (pair (if (null? pending) "" pending) acc))
         (self (rest ts) (first (rest (first ts))) acc)))))
-(def %mk-pieces
+(def mk-pieces
   (fn (_ ts) (%mk-pieces-go ts () ())))
 
 ; the texts of a run of tokens that has no separators
@@ -149,12 +158,12 @@
     (if (null? ts) (reverse acc)
       (self (rest ts) (pair (first (rest (first ts))) acc)))))
 
-(def %mk-words
+(def mk-words
   (fn (_ s)
     (if (= (byte-len s) 0) ()
       (%mk-run-texts (lexer-read (%mk-lx-words) s) ()))))
 
-(def %mk-join
+(def mk-join
   (fn (self ws sep)
     (if (null? ws) ""
       (if (null? (rest ws)) (first ws)
@@ -197,16 +206,16 @@
                                   #f)))))
                    (go2 0))))
         (if hit i (self s t ls lt (+ i 1)))))))
-(def %mk-find
+(def mk-find
   (fn (_ s t) (%mk-find-go s t (byte-len s) (byte-len t) 0)))
 
 ; literal replace-all
-(def %mk-subst
+(def mk-subst
   (fn (_ from to text)
     (def lf (byte-len from))
     (if (= lf 0) text
       (let ((go (fn (self s acc)
-                  (let ((at (%mk-find s from)))
+                  (let ((at (mk-find s from)))
                     (if (< at 0)
                       (string-concat (reverse (pair s acc)))
                       (self (substring s (+ at lf) (byte-len s))
@@ -215,7 +224,7 @@
 
 ; --- the variable table ------------------------------------------------------
 
-(def %mk-var-entry
+(def mk-var-entry
   (fn (_ vars name)
     (def go
       (fn (self es)
@@ -226,9 +235,9 @@
     (go (first vars))))
 
 ; a file assignment; a lock entry wins over it silently
-(def %mk-var-set!
+(def mk-var-set!
   (fn (_ vars name label text)
-    (def e (%mk-var-entry vars name))
+    (def e (mk-var-entry vars name))
     (if (null? e)
       (set-first! vars (pair (pair name (pair label text)) (first vars)))
       (if (eq? (first (rest e)) (lit lock))
@@ -264,20 +273,21 @@
       (fn (self i acc)
         (if (>= i end) (regex-compile (string-concat (reverse acc)))
           (let ((b (byte-at pat i)))
-            (if (= b 42) (self (+ i 1) (pair ".*" acc))          ; *
-              (if (= b 63) (self (+ i 1) (pair "." acc))         ; ?
-                (if (= b 91)                                     ; [
-                  (let ((close (let ((go2 (fn (self2 j)
-                                            (if (>= j end) j
-                                              (if (= (byte-at pat j) 93)
-                                                (+ j 1)
-                                                (self2 (+ j 1)))))))
-                                 (go2 (+ i 1)))))
-                    (self close (pair (substring pat i close) acc)))
-                  (if (special? b)
-                    (self (+ i 1)
-                      (pair (string-append "\\" (%mk-b->s b)) acc))
-                    (self (+ i 1) (pair (%mk-b->s b) acc))))))))))
+            (match
+              ((= b 42) (self (+ i 1) (pair ".*" acc)))          ; *
+              ((= b 63) (self (+ i 1) (pair "." acc)))           ; ?
+              ((= b 91)                                          ; [
+                (let ((close (let ((go2 (fn (self2 j)
+                                          (if (>= j end) j
+                                            (if (= (byte-at pat j) 93)
+                                              (+ j 1)
+                                              (self2 (+ j 1)))))))
+                               (go2 (+ i 1)))))
+                  (self close (pair (substring pat i close) acc))))
+              ((special? b)
+                (self (+ i 1)
+                  (pair (string-append "\\" (%mk-b->s b)) acc)))
+              (#t (self (+ i 1) (pair (%mk-b->s b) acc))))))))
     (go 0 ())))
 
 (def %mk-glob-one
@@ -291,7 +301,7 @@
     (def dirpart (if (< slash 0) "" (substring pat 0 slash)))
     (def basepat (if (< slash 0) pat
                    (substring pat (+ slash 1) (byte-len pat))))
-    (def scan-dir (%mk-path (if (= (byte-len dirpart) 0) "." dirpart)))
+    (def scan-dir (mk-path (if (= (byte-len dirpart) 0) "." dirpart)))
     (if (not (file-exists? scan-dir)) ()
       (let ((rx (%mk-glob-rx basepat)))
         (def names
@@ -306,7 +316,7 @@
 
 ; --- expansion ---------------------------------------------------------------
 
-(def %mk-expand ())
+(def mk-expand ())
 
 ; auto overlay, then the table; a rec entry re-expands at use
 (def %mk-lookup
@@ -319,17 +329,17 @@
                       (self (rest es)))))))
         (go autos)))
     (if (not (null? a)) (rest a)
-      (let ((e (%mk-var-entry vars name)))
+      (let ((e (mk-var-entry vars name)))
         (if (null? e) ""
           (if (eq? (first (rest e)) (lit rec))
-            (%mk-expand (rest (rest e)) vars autos)
+            (mk-expand (rest (rest e)) vars autos)
             (rest (rest e))))))))
 
 ; split an argument string on top-level commas (paren/brace aware): a comma
 ; at the end opens an empty last argument, and an empty string is one
-(def %mk-args
+(def mk-args
   (fn (_ s)
-    (let ((cut (%mk-pieces (lexer-read (%mk-lx-split 44) s))))
+    (let ((cut (mk-pieces (lexer-read (mk-lx-split 44) s))))
       (if (rest cut) (append (first cut) (list "")) (first cut)))))
 
 (def %mk-fn-name?
@@ -337,7 +347,7 @@
     (def ln (byte-len nm))
     (if (<= (byte-len s) ln) #f
       (if (string=? (substring s 0 ln) nm)
-        (%mk-ws? (byte-at s ln))
+        (mk-ws? (byte-at s ln))
         #f))))
 
 ; the inner text of one $(...): a function call or a variable reference
@@ -345,68 +355,70 @@
   (fn (_ inner vars autos)
     (def call
       (fn (_ nm)
-        (%mk-args
-          (%mk-trim
+        (mk-args
+          (mk-trim
             (substring inner (+ (byte-len nm) 1) (byte-len inner))))))
-    (if (%mk-fn-name? inner "shell")
-      (let ((cmd (%mk-expand (first (call "shell")) vars autos)))
-        (def full (if (= (byte-len %mk-cwd) 0) cmd
-                    (string-append "cd " (string-append %mk-cwd
-                      (string-append " && " cmd)))))
-        (def r (proc-capture (list "/bin/sh" "-c" full)))
-        ; GNU: trailing newlines dropped, interior newlines to spaces
-        (%mk-join (%mk-words (rest r)) " "))
-    (if (%mk-fn-name? inner "wildcard")
-      (let ((pats (%mk-words (%mk-expand (first (call "wildcard")) vars autos))))
-        (def go
-          (fn (self ps acc)
-            (if (null? ps) (%mk-join (reverse acc) " ")
-              (self (rest ps)
-                (let ((ms (%mk-glob-one (first ps))))
-                  (if (null? ms) acc (pair (%mk-join ms " ") acc)))))))
-        (go pats ()))
-    (if (%mk-fn-name? inner "findstring")
-      (let ((as (call "findstring")))
-        (def f (%mk-expand (first as) vars autos))
-        (def in (%mk-expand (first (rest as)) vars autos))
-        (if (< (%mk-find in f) 0) "" f))
-    (if (%mk-fn-name? inner "if")
-      (let ((as (call "if")))
-        (if (> (byte-len (%mk-trim (%mk-expand (first as) vars autos))) 0)
-          (%mk-expand (first (rest as)) vars autos)
-          (if (null? (rest (rest as))) ""
-            (%mk-expand (first (rest (rest as))) vars autos))))
-    (if (%mk-fn-name? inner "subst")
-      (let ((as (call "subst")))
-        (%mk-subst (%mk-expand (first as) vars autos)
-          (%mk-expand (first (rest as)) vars autos)
-          (%mk-expand (first (rest (rest as))) vars autos)))
-    (if (%mk-fn-name? inner "patsubst")
-      (let ((as (call "patsubst")))
-        (%mk-patsubst (%mk-expand (first as) vars autos)
-          (%mk-expand (first (rest as)) vars autos)
-          (%mk-expand (first (rest (rest as))) vars autos)))
-    (if (%mk-fn-name? inner "basename")
-      (%mk-join
-        (map (fn (_ w) (%mk-basename w))
-          (%mk-words (%mk-expand (first (call "basename")) vars autos)))
-        " ")
-    (if (%mk-fn-name? inner "dir")
-      (%mk-join
-        (map (fn (_ w) (%mk-dirpart w))
-          (%mk-words (%mk-expand (first (call "dir")) vars autos)))
-        " ")
-    (if (%mk-fn-name? inner "notdir")
-      (%mk-join
-        (map (fn (_ w) (%mk-notdir w))
-          (%mk-words (%mk-expand (first (call "notdir")) vars autos)))
-        " ")
-    (if (%mk-fn-name? inner "strip")
-      (%mk-join (%mk-words (%mk-expand (first (call "strip")) vars autos)) " ")
-    ; a variable reference; a computed name expands first
-    (let ((name (if (< (%mk-find inner "$") 0) inner
-                  (%mk-expand inner vars autos))))
-      (%mk-lookup name vars autos))))))))))))))
+    (match
+      ((%mk-fn-name? inner "shell")
+        (let ((cmd (mk-expand (first (call "shell")) vars autos)))
+          (def full (if (= (byte-len (mk-cwd)) 0) cmd
+                      (string-append "cd " (string-append (mk-cwd)
+                        (string-append " && " cmd)))))
+          (def r (proc-capture (list "/bin/sh" "-c" full)))
+          ; GNU: trailing newlines dropped, interior newlines to spaces
+          (mk-join (mk-words (rest r)) " ")))
+      ((%mk-fn-name? inner "wildcard")
+        (let ((pats (mk-words (mk-expand (first (call "wildcard")) vars autos))))
+          (def go
+            (fn (self ps acc)
+              (if (null? ps) (mk-join (reverse acc) " ")
+                (self (rest ps)
+                  (let ((ms (%mk-glob-one (first ps))))
+                    (if (null? ms) acc (pair (mk-join ms " ") acc)))))))
+          (go pats ())))
+      ((%mk-fn-name? inner "findstring")
+        (let ((as (call "findstring")))
+          (def f (mk-expand (first as) vars autos))
+          (def in (mk-expand (first (rest as)) vars autos))
+          (if (< (mk-find in f) 0) "" f)))
+      ((%mk-fn-name? inner "if")
+        (let ((as (call "if")))
+          (if (> (byte-len (mk-trim (mk-expand (first as) vars autos))) 0)
+            (mk-expand (first (rest as)) vars autos)
+            (if (null? (rest (rest as))) ""
+              (mk-expand (first (rest (rest as))) vars autos)))))
+      ((%mk-fn-name? inner "subst")
+        (let ((as (call "subst")))
+          (mk-subst (mk-expand (first as) vars autos)
+            (mk-expand (first (rest as)) vars autos)
+            (mk-expand (first (rest (rest as))) vars autos))))
+      ((%mk-fn-name? inner "patsubst")
+        (let ((as (call "patsubst")))
+          (%mk-patsubst (mk-expand (first as) vars autos)
+            (mk-expand (first (rest as)) vars autos)
+            (mk-expand (first (rest (rest as))) vars autos))))
+      ((%mk-fn-name? inner "basename")
+        (mk-join
+          (map (fn (_ w) (%mk-basename w))
+            (mk-words (mk-expand (first (call "basename")) vars autos)))
+          " "))
+      ((%mk-fn-name? inner "dir")
+        (mk-join
+          (map (fn (_ w) (%mk-dirpart w))
+            (mk-words (mk-expand (first (call "dir")) vars autos)))
+          " "))
+      ((%mk-fn-name? inner "notdir")
+        (mk-join
+          (map (fn (_ w) (%mk-notdir w))
+            (mk-words (mk-expand (first (call "notdir")) vars autos)))
+          " "))
+      ((%mk-fn-name? inner "strip")
+        (mk-join (mk-words (mk-expand (first (call "strip")) vars autos)) " "))
+      (#t
+      ; a variable reference; a computed name expands first
+      (let ((name (if (< (mk-find inner "$") 0) inner
+                    (mk-expand inner vars autos))))
+        (%mk-lookup name vars autos))))))
 
 (def %mk-last-slash
   (fn (_ w)
@@ -440,12 +452,12 @@
 ; pattern word substitution: one % in PAT is the stem
 (def %mk-patsubst
   (fn (_ pat repl text)
-    (def pc (%mk-find pat "%"))
+    (def pc (mk-find pat "%"))
     (def go
       (fn (self ws acc)
-        (if (null? ws) (%mk-join (reverse acc) " ")
+        (if (null? ws) (mk-join (reverse acc) " ")
           (self (rest ws) (pair (%mk-pat-one (first ws) pat repl pc) acc)))))
-    (go (%mk-words text) ())))
+    (go (mk-words text) ())))
 
 (def %mk-pat-one
   (fn (_ w pat repl pc)
@@ -462,7 +474,7 @@
                 #f)
               #f)
           (let ((stem (substring w lp (- lw ls))))
-            (%mk-subst "%" stem repl))
+            (mk-subst "%" stem repl))
           w)))))
 
 ; the inner text of a reference token: $( or ${ off the front, and the
@@ -483,7 +495,7 @@
       (%mk-lookup (substring tx 1 2) vars autos))))
 
 ; the scanner: text with $-references to text without, token by token
-(set! %mk-expand
+(set! mk-expand
   (fn (_ text vars autos)
     (def go
       (fn (self ts acc)
@@ -500,3 +512,8 @@
                 acc))))))
     (if (= (byte-len text) 0) text
       (go (lexer-read (%mk-lx-expand) text) ()))))
+
+(provide mk/expand
+  mk-args mk-cwd mk-expand mk-find mk-join mk-lx-lines-cell mk-lx-split
+  mk-path mk-pieces mk-subst mk-trim mk-var-entry mk-var-set! mk-words
+  mk-ws? mk-cwd!)

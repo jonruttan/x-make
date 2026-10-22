@@ -10,20 +10,11 @@
 ; and the regex engine for glob matching, with the arc's rules applied
 ; -- raw-allocation for read buffers, no defs at depth in anything hot.
 
+(module mk/prims)
 (import x/type/regex)
 (import x/sys/file)
 (import x/sys/proc)
 (import x/sys/opts)
-
-(provide mk/prims
-  char->integer integer->char byte-at byte-len
-  string-length substring string-append string-concat string=?
-  list->string length reverse append map filter set-first!
-  regex-compile regex-match
-  file-read-all file-write-all file-exists? file-stat-mtime
-  file-list-dir file-unlink
-  proc-run proc-capture sys-exit
-  Opts)
 
 (def char->integer (prim-ref (lit char) (lit ->int)))
 (def integer->char (prim-ref (lit int) (lit ->char)))
@@ -99,3 +90,11 @@
 (def lexer-word
   (fn (_ tag start contexts stop) (Lexer word tag start contexts stop (lit to-end))))
 (def lexer-read (fn (_ l s) (l read-str s)))
+
+(provide mk/prims
+  append byte-at byte-len char->integer file-exists? file-list-dir
+  file-read-all file-stat-mtime file-unlink file-write-all filter
+  integer->char length lexer-escape lexer-make lexer-nested lexer-read
+  lexer-run lexer-skip lexer-table lexer-word list->string map
+  proc-capture proc-run regex-compile regex-match reverse set-first!
+  string-append string-concat string-length string=? substring sys-exit)
