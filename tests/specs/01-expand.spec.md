@@ -7,7 +7,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### recursive and simple, long and short spellings
 
 ```make
-(do (def v (list ())) (%mk-var-set! v "X" (lit rec) "wor$(Y)") (%mk-var-set! v "Y" (lit rec) "ld") (display (%mk-expand "hello $(X)!" v ())))
+(do (def v (list ())) (mk-var-set! v "X" (lit rec) "wor$(Y)") (mk-var-set! v "Y" (lit rec) "ld") (display (mk-expand "hello $(X)!" v ())))
 ```
 ---
     hello world!
@@ -15,7 +15,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### an undefined variable is empty
 
 ```make
-(do (def v (list ())) (display (%mk-expand "a$(NOPE)b" v ())))
+(do (def v (list ())) (display (mk-expand "a$(NOPE)b" v ())))
 ```
 ---
     ab
@@ -23,7 +23,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### dollar-dollar is a dollar
 
 ```make
-(do (def v (list ())) (display (%mk-expand "cost $$5" v ())))
+(do (def v (list ())) (display (mk-expand "cost $$5" v ())))
 ```
 ---
     cost $5
@@ -31,7 +31,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### the automatics overlay wins
 
 ```make
-(do (def v (list ())) (%mk-var-set! v "@" (lit rec) "table") (display (%mk-expand "$@ and $(@)" v (list (pair "@" "auto")))))
+(do (def v (list ())) (mk-var-set! v "@" (lit rec) "table") (display (mk-expand "$@ and $(@)" v (list (pair "@" "auto")))))
 ```
 ---
     auto and auto
@@ -41,7 +41,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### subst
 
 ```make
-(do (def v (list ())) (display (%mk-expand "$(subst ee,EE,feet on street)" v ())))
+(do (def v (list ())) (display (mk-expand "$(subst ee,EE,feet on street)" v ())))
 ```
 ---
     fEEt on strEEt
@@ -49,7 +49,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### patsubst
 
 ```make
-(do (def v (list ())) (display (%mk-expand "$(patsubst %.c,%.o,a.c b.c c.h)" v ())))
+(do (def v (list ())) (display (mk-expand "$(patsubst %.c,%.o,a.c b.c c.h)" v ())))
 ```
 ---
     a.o b.o c.h
@@ -57,7 +57,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### findstring
 
 ```make
-(do (def v (list ())) (display (%mk-expand "[$(findstring a,abc)][$(findstring z,abc)]" v ())))
+(do (def v (list ())) (display (mk-expand "[$(findstring a,abc)][$(findstring z,abc)]" v ())))
 ```
 ---
     [a][]
@@ -65,7 +65,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### if
 
 ```make
-(do (def v (list ())) (%mk-var-set! v "Y" (lit rec) "1") (display (%mk-expand "$(if $(Y),yes,no)/$(if $(N),yes,no)" v ())))
+(do (def v (list ())) (mk-var-set! v "Y" (lit rec) "1") (display (mk-expand "$(if $(Y),yes,no)/$(if $(N),yes,no)" v ())))
 ```
 ---
     yes/no
@@ -73,7 +73,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### basename dir notdir
 
 ```make
-(do (def v (list ())) (display (%mk-expand "$(basename src/a.c)|$(dir src/a.c)|$(notdir src/a.c)" v ())))
+(do (def v (list ())) (display (mk-expand "$(basename src/a.c)|$(dir src/a.c)|$(notdir src/a.c)" v ())))
 ```
 ---
     src/a|src/|a.c
@@ -81,7 +81,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### strip
 
 ```make
-(do (def v (list ())) (display (%mk-expand "[$(strip   a   b  )]" v ())))
+(do (def v (list ())) (display (mk-expand "[$(strip   a   b  )]" v ())))
 ```
 ---
     [a b]
@@ -89,7 +89,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### shell
 
 ```make
-(do (def v (list ())) (display (%mk-expand "$(shell printf 'one two')" v ())))
+(do (def v (list ())) (display (mk-expand "$(shell printf 'one two')" v ())))
 ```
 ---
     one two
@@ -99,7 +99,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### a dollar alone at the end stands, and a reference left open runs to the end
 
 ```make
-(do (def v (list ())) (%mk-var-set! v "X" (lit rec) "x") (display (%mk-expand "a$" v ())) (display "|") (display (%mk-expand "a$(X" v ())) (display "|") (display (%mk-expand "a${X" v ())))
+(do (def v (list ())) (mk-var-set! v "X" (lit rec) "x") (display (mk-expand "a$" v ())) (display "|") (display (mk-expand "a$(X" v ())) (display "|") (display (mk-expand "a${X" v ())))
 ```
 ---
     a$|ax|ax
@@ -107,7 +107,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### parentheses nest inside a reference, and braces inside a brace reference
 
 ```make
-(do (def v (list ())) (%mk-var-set! v "Y" (lit rec) "y") (display (%mk-expand "[$(if $(Y),$(subst a,b,(a)),no)] [${Y}]" v ())))
+(do (def v (list ())) (mk-var-set! v "Y" (lit rec) "y") (display (mk-expand "[$(if $(Y),$(subst a,b,(a)),no)] [${Y}]" v ())))
 ```
 ---
     [(b)] [y]
@@ -115,7 +115,7 @@ The expansion engine, pure: a vars box, text in, text out.
 ### an argument list splits at top-level commas only, a last comma opening an empty argument
 
 ```make
-(do (write (%mk-args "a,$(b,c),(d,e)")) (write (%mk-args "a,")) (write (%mk-args "")))
+(do (write (mk-args "a,$(b,c),(d,e)")) (write (mk-args "a,")) (write (mk-args "")))
 ```
 ---
     ("a" "$(b,c)" "(d,e)")("a" "")("")

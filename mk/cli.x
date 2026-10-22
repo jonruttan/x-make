@@ -13,11 +13,20 @@
 ; it, place options after the first target.  Statuses: 0 built or up to
 ; date, 2 anything failed -- GNU's own reading.
 
+(module mk/cli)
+(import mk/expand mk-cwd mk-cwd! mk-find mk-path mk-var-set!)
+(import mk/parse mk-parse)
+(import mk/prims
+  byte-at byte-len file-exists? file-read-all file-write-all filter
+  reverse string-append string-concat string=? substring sys-exit)
+(import mk/run mk-build mk-default-goal mk-dry mk-dry! mk-quiet mk-quiet!)
 (def %mk-cli-engine-flag?
   (fn (_ s)
-    (if (string=? s "--quiet") #t
-      (if (string=? s "--batch") #t
-        (if (string=? s "--no-color") #t (string=? s "--verbose"))))))
+    (match
+      ((string=? s "--quiet") #t)
+      ((string=? s "--batch") #t)
+      ((string=? s "--no-color") #t)
+      (#t (string=? s "--verbose")))))
 
 (def mk-argv
   (fn (_ raw)
@@ -43,15 +52,16 @@
 ; a VAR=value operand: NAME then =
 (def %mk-assign-op?
   (fn (_ op)
-    (def at (%mk-find op "="))
+    (def at (mk-find op "="))
     (if (< at 1) #f
       (let ((go (fn (self i)
                   (if (>= i at) #t
                     (let ((b (byte-at op i)))
-                      (if (if (if (>= b 65) (<= b 90) #f) #t
-                            (if (if (>= b 97) (<= b 122) #f) #t
-                              (if (if (>= b 48) (<= b 57) #f) #t
-                                (= b 95))))
+                      (if (match
+                            ((if (>= b 65) (<= b 90) #f) #t)
+                            ((if (>= b 97) (<= b 122) #f) #t)
+                            ((if (>= b 48) (<= b 57) #f) #t)
+                            (#t (= b 95)))
                         (self (+ i 1))
                         #f))))))
         (go 0)))))
@@ -120,35 +130,35 @@
     (def opts (first plan))
     (def ovr (first (rest plan)))
     (def targets (first (rest (rest plan))))
-    (set! %mk-cwd (first opts))
-    (set! %mk-dry (first (rest (rest opts))))
-    (set! %mk-quiet (first (rest (rest (rest opts)))))
+    (mk-cwd! (first opts))
+    (mk-dry! (first (rest (rest opts))))
+    (mk-quiet! (first (rest (rest (rest opts)))))
     (def mf-name
       (if (null? (first (rest opts)))
-        (if (file-exists? (%mk-path "Makefile")) "Makefile"
-          (if (file-exists? (%mk-path "makefile")) "makefile" ()))
+        (if (file-exists? (mk-path "Makefile")) "Makefile"
+          (if (file-exists? (mk-path "makefile")) "makefile" ()))
         (first (rest opts))))
     (if (null? mf-name)
       (do (file-write-all "/dev/stderr" "make: no makefile found\n")
           2)
       (let ((vars (list ())))
         ; MAKE for recursion; command-line overrides LOCK theirs
-        (%mk-var-set! vars "MAKE" (lit rec) "x -l make --")
+        (mk-var-set! vars "MAKE" (lit rec) "x -l make --")
         (def lock!
           (fn (self os)
             (if (null? os) ()
-              (let ((at (%mk-find (first os) "=")))
-                (%mk-var-set! vars (substring (first os) 0 at)
+              (let ((at (mk-find (first os) "=")))
+                (mk-var-set! vars (substring (first os) 0 at)
                   (lit lock)
                   (substring (first os) (+ at 1) (byte-len (first os))))
                 (self (rest os))))))
         (lock! ovr)
-        (def parsed (mk-parse (file-read-all (%mk-path mf-name)) vars))
+        (def parsed (mk-parse (file-read-all (mk-path mf-name)) vars))
         (def rules (first (rest parsed)))
         (def phony (first (rest (rest parsed))))
         (def goals
           (if (null? targets)
-            (let ((d (%mk-default-goal rules)))
+            (let ((d (mk-default-goal rules)))
               (if (null? d)
                 (Err raise (lit make) "make: no targets" ())
                 (list d)))
@@ -157,10 +167,10 @@
           (fn (self gs any-built?)
             (if (null? gs)
               (do (if any-built? ()
-                    (if %mk-quiet ()
+                    (if (mk-quiet) ()
                       (display "make: nothing to be done\n")))
                   0)
-              (let ((r (%mk-build (first gs) vars rules phony ())))
+              (let ((r (mk-build (first gs) vars rules phony ())))
                 (if (> (rest r) 0)
                   (rest r)
                   (self (rest gs)
@@ -171,3 +181,6 @@
 (def mk-main
   (fn (_ raw-args)
     (sys-exit (mk-run (mk-argv raw-args)))))
+
+(provide mk/cli
+  mk-argv mk-main mk-parse-cli mk-run)

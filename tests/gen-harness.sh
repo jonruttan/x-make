@@ -41,6 +41,11 @@ cat > "$OUT" <<EOF
 (def %install-root "$X_ROOT")
 (include "$X_BASE")
 (import-path! "$BUNDLE")
-(import mk/base)
-(set! %repl-print %make-repl-print)
+(import mk/base make-repl-print)
+(import mk/cli mk-parse-cli mk-run)
+(import mk/expand mk-expand mk-var-set! mk-args)
+(import mk/prims file-exists? file-read-all file-write-all proc-run)
+; a spec reaches a module's private through the module itself
+(def %mk-refusal (eval (lit %mk-refusal) (module mk/cli)))
+(set! %repl-print make-repl-print)
 EOF

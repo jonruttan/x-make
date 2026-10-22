@@ -24,10 +24,18 @@
 ; any other backslash and the byte after it stand (so a doubled backslash
 ; before a newline is no continuation), and a last line nothing ended is a
 ; line when it has bytes.
+(module mk/parse)
+(import mk/expand
+  mk-args mk-expand mk-find mk-lx-lines-cell mk-lx-split mk-path
+  mk-pieces mk-trim mk-var-entry mk-var-set! mk-words mk-ws?)
+(import mk/prims
+  append byte-at byte-len file-exists? file-read-all lexer-escape
+  lexer-make lexer-read lexer-run lexer-table reverse set-first!
+  string-append string-concat string=? substring)
 (def %mk-lx-lines
   (fn (_)
-    (if (null? (first %mk-lx-lines-cell))
-      (set-first! %mk-lx-lines-cell
+    (if (null? (first mk-lx-lines-cell))
+      (set-first! mk-lx-lines-cell
         (lexer-make
           (list
             (lexer-table (lit cont) (list "\\\n"))
@@ -38,7 +46,7 @@
               (list (pair 0 9) (pair 11 91) (pair 93 255) (pair -128 -1))))
           "\n"))
       ())
-    (first %mk-lx-lines-cell)))
+    (first mk-lx-lines-cell)))
 
 (def %mk-fold-go
   (fn (self ts cur acc)
@@ -59,7 +67,7 @@
 ; the # comment strips from an UNQUOTED position (recipes keep theirs)
 (def %mk-strip-comment
   (fn (_ s)
-    (let ((at (%mk-find s "#")))
+    (let ((at (mk-find s "#")))
       (if (< at 0) s (substring s 0 at)))))
 
 (def %mk-starts?
@@ -68,7 +76,7 @@
     (if (< (byte-len s) lw) #f
       (if (string=? (substring s 0 lw) w)
         (if (= (byte-len s) lw) #t
-          (%mk-ws? (byte-at s lw)))
+          (mk-ws? (byte-at s lw)))
         #f))))
 
 ; the first : that is outside $(...) -- a rule line's split point, or -1:
@@ -76,7 +84,7 @@
 (def %mk-rule-colon
   (fn (_ s)
     (if (= (byte-len s) 0) (- 0 1)
-      (let ((cut (%mk-pieces (lexer-read (%mk-lx-split 58) s))))
+      (let ((cut (mk-pieces (lexer-read (mk-lx-split 58) s))))
         (if (if (rest cut) #t (pair? (rest (first cut))))
           (byte-len (first (first cut)))
           (- 0 1))))))
@@ -85,7 +93,7 @@
 ; cond append
 (def %mk-parse-assign
   (fn (_ s)
-    (def at (%mk-find s "="))
+    (def at (mk-find s "="))
     (if (< at 0) ()
       (let ((colon (%mk-rule-colon s)))
         ; a rule's colon before the = means this is a rule, not an
@@ -94,34 +102,35 @@
           ()
           (let ((prev (if (> at 0) (byte-at s (- at 1)) 0)))
             (def label
-              (if (= prev 58) (lit simple)                  ; :=
-                (if (= prev 63) (lit cond)                  ; ?=
-                  (if (= prev 43) (lit append)              ; +=
-                    (lit rec)))))
+              (match
+                ((= prev 58) (lit simple))                  ; :=
+                ((= prev 63) (lit cond))                    ; ?=
+                ((= prev 43) (lit append))                  ; +=
+                (#t (lit rec))))
             (def name-end (if (eq? label (lit rec)) at (- at 1)))
-            (def name (%mk-trim (substring s 0 name-end)))
+            (def name (mk-trim (substring s 0 name-end)))
             (if (= (byte-len name) 0) ()
               (list name label
-                (%mk-trim (substring s (+ at 1) (byte-len s)))))))))))
+                (mk-trim (substring s (+ at 1) (byte-len s)))))))))))
 
 ; --- conditionals ------------------------------------------------------------
 
 ; ifeq (A,B) / ifneq (A,B): both sides expanded, compared as text
 (def %mk-cond-eq?
   (fn (_ rest-text vars)
-    (def t (%mk-trim rest-text))
+    (def t (mk-trim rest-text))
     (if (if (> (byte-len t) 1) (= (byte-at t 0) 40) #f)
       (let ((inner (substring t 1 (- (byte-len t) 1))))
-        (def as (%mk-args inner))
+        (def as (mk-args inner))
         (if (null? (rest as))
           (Err raise (lit make) "make: ifeq wants (a,b)" ())
-          (string=? (%mk-trim (%mk-expand (first as) vars ()))
-            (%mk-trim (%mk-expand (first (rest as)) vars ())))))
+          (string=? (mk-trim (mk-expand (first as) vars ()))
+            (mk-trim (mk-expand (first (rest as)) vars ())))))
       (Err raise (lit make) "make: ifeq wants (a,b)" ()))))
 
 (def %mk-cond-def?
   (fn (_ rest-text vars)
-    (not (null? (%mk-var-entry vars (%mk-trim rest-text))))))
+    (not (null? (mk-var-entry vars (mk-trim rest-text))))))
 
 ; --- the fold ----------------------------------------------------------------
 
@@ -189,9 +198,9 @@
     (def vars (first st))
     (def optional (= (byte-at bare 0) 45))
     (def path
-      (%mk-path
-        (%mk-trim
-          (%mk-expand (substring bare (if optional 8 7) (byte-len bare))
+      (mk-path
+        (mk-trim
+          (mk-expand (substring bare (if optional 8 7) (byte-len bare))
             vars ()))))
     (if (file-exists? path)
       (do (%mk-parse-lines! (%mk-fold-lines (file-read-all path)) st ())
@@ -204,7 +213,7 @@
 (def %mk-c-bare
   (fn (_ line st conds)
     (def vars (first st))
-    (def bare (%mk-trim (%mk-strip-comment line)))
+    (def bare (mk-trim (%mk-strip-comment line)))
     (if (= (byte-len bare) 0)
       conds
       (if (if (%mk-starts? bare "include") #t (%mk-starts? bare "-include"))
@@ -227,64 +236,63 @@
   (fn (_ line st conds)
     (def vars (first st))
     (def active (%mk-conds-active? conds))
-    (if (%mk-starts? line "ifeq")
-      (%mk-c-push
-        (if active (%mk-cond-eq? (substring line 4 (byte-len line)) vars) #f)
-        active conds)
-      (if (%mk-starts? line "ifneq")
+    (match
+      ((%mk-starts? line "ifeq")
+        (%mk-c-push
+          (if active (%mk-cond-eq? (substring line 4 (byte-len line)) vars) #f)
+          active conds))
+      ((%mk-starts? line "ifneq")
         (%mk-c-push
           (if active
             (not (%mk-cond-eq? (substring line 5 (byte-len line)) vars))
             #f)
-          active conds)
-        (if (%mk-starts? line "ifdef")
-          (%mk-c-push
-            (if active
-              (%mk-cond-def? (substring line 5 (byte-len line)) vars)
-              #f)
-            active conds)
-          (if (%mk-starts? line "ifndef")
-            (%mk-c-push
-              (if active
-                (not (%mk-cond-def? (substring line 6 (byte-len line)) vars))
-                #f)
-              active conds)
-            (if (%mk-starts? line "else")
-              (%mk-c-else conds)
-              (if (%mk-starts? line "endif")
-                (%mk-c-endif conds)
-                (if (not active)
-                  conds
-                  (if (if (> (byte-len line) 0) (= (byte-at line 0) 9) #f)
-                    (%mk-c-recipe line st conds)
-                    (%mk-c-bare line st conds)))))))))))
+          active conds))
+      ((%mk-starts? line "ifdef")
+        (%mk-c-push
+          (if active
+            (%mk-cond-def? (substring line 5 (byte-len line)) vars)
+            #f)
+          active conds))
+      ((%mk-starts? line "ifndef")
+        (%mk-c-push
+          (if active
+            (not (%mk-cond-def? (substring line 6 (byte-len line)) vars))
+            #f)
+          active conds))
+      ((%mk-starts? line "else") (%mk-c-else conds))
+      ((%mk-starts? line "endif") (%mk-c-endif conds))
+      ((not active) conds)
+      ((if (> (byte-len line) 0) (= (byte-at line 0) 9) #f)
+        (%mk-c-recipe line st conds))
+      (#t (%mk-c-bare line st conds)))))
 
 ; one assignment, per label
 (def %mk-assign!
   (fn (_ vars name label text)
-    (if (eq? label (lit simple))
-      (%mk-var-set! vars name (lit simple) (%mk-expand text vars ()))
-      (if (eq? label (lit cond))
-        (if (null? (%mk-var-entry vars name))
-          (%mk-var-set! vars name (lit rec) text)
-          ())
-        (if (eq? label (lit append))
-          (let ((e (%mk-var-entry vars name)))
-            (if (null? e)
-              (%mk-var-set! vars name (lit rec) text)
-              (%mk-var-set! vars name (first (rest e))
-                (string-append (rest (rest e)) (string-append " " text)))))
-          (%mk-var-set! vars name (lit rec) text))))))
+    (match
+      ((eq? label (lit simple))
+        (mk-var-set! vars name (lit simple) (mk-expand text vars ())))
+      ((eq? label (lit cond))
+        (if (null? (mk-var-entry vars name))
+          (mk-var-set! vars name (lit rec) text)
+          ()))
+      ((eq? label (lit append))
+        (let ((e (mk-var-entry vars name)))
+          (if (null? e)
+            (mk-var-set! vars name (lit rec) text)
+            (mk-var-set! vars name (first (rest e))
+              (string-append (rest (rest e)) (string-append " " text))))))
+      (#t (mk-var-set! vars name (lit rec) text)))))
 
 ; a rule line: close the previous rule, open this one; .PHONY collects
 (def %mk-rule-line!
   (fn (_ st bare colon)
     (def vars (first st))
     (def targets
-      (%mk-words (%mk-expand (substring bare 0 colon) vars ())))
+      (mk-words (mk-expand (substring bare 0 colon) vars ())))
     (def prereqs
-      (%mk-words
-        (%mk-expand (substring bare (+ colon 1) (byte-len bare)) vars ())))
+      (mk-words
+        (mk-expand (substring bare (+ colon 1) (byte-len bare)) vars ())))
     (%mk-close-rule! st)
     (if (if (pair? targets) (string=? (first targets) ".PHONY") #f)
       (set-first! (rest (rest st))
@@ -303,3 +311,6 @@
     (list vars
       (reverse (first (rest st)))
       (first (rest (rest st))))))
+
+(provide mk/parse
+  mk-parse)
