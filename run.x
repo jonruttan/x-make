@@ -13,11 +13,11 @@
 ;   x -l make -- [-C dir] [-f makefile] [-ns] [VAR=value]... [target]...
 
 (import mk/base make-repl-print make-version)
-(import mk/cli mk-argv mk-main)
+(import mk/cli mk-main)
 (set! %lang-name "MAKE")
 (set! %lang-version make-version)
 (set! %repl-prompt "make> ")
 (set! %repl-print make-repl-print)
 
-(unless (null? (mk-argv args))
-  (mk-main args))
+(let ((ops (rest (Sys args (lit program)))))
+  (unless (null? ops) (mk-main ops)))
