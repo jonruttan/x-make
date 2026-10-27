@@ -31,7 +31,10 @@
       (Opts arg "-C" "DIR" "Change to DIR before reading the makefile")
       (Opts arg "-f" "FILE" "Read FILE as the makefile")
       (Opts flag "-n" "Print the commands, run none")
-      (Opts flag "-s" "Run commands without printing them"))))
+      (Opts flag "-s" "Run commands without printing them")
+      ; GNU make's and BSD make's -w prints the directory entered and
+      ; left; this make never prints one, so -w is taken and does nothing
+      (Opts hidden (Opts flag "-w" "Nothing")))))
 
 ; a VAR=value operand: NAME then =
 (def %mk-assign-op?
@@ -126,8 +129,11 @@
       (do (file-write-all "/dev/stderr" "make: no makefile found\n")
           2)
       (let ((vars (list ())))
-        ; MAKE for recursion; command-line overrides LOCK theirs
+        ; MAKE for recursion, CC as GNU make and BSD make default it (a
+        ; CC?= in the makefile leaves it); command-line overrides LOCK
+        ; theirs
         (mk-var-set! vars "MAKE" (lit rec) "x -l make --")
+        (mk-var-set! vars "CC" (lit rec) "cc")
         (def lock!
           (fn (self os)
             (if (null? os) ()

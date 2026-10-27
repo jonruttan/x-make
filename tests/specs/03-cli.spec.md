@@ -52,3 +52,11 @@ Bring TARGETs up to date, as a makefile describes them
 ```
 ---
     ((/var mk #t #t) (X=1) (a b))
+
+### -w, the directory-printing option GNU make and BSD make share, passes and changes nothing
+
+```make
+(display (mk-parse-cli (list "-w" "-C" "/tmp" "all")))
+```
+---
+    ((/tmp () #f #f) () (all))

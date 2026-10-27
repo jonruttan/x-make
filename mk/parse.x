@@ -20,10 +20,10 @@
 ; where cur = (targets prereqs recipes-rev); finishing a rule pushes
 ; it.  Conditional stack entries: (taking? seen-true? parent-active?).
 
-; The lines of a makefile: a backslash-newline joins with a single space,
-; any other backslash and the byte after it stand (so a doubled backslash
-; before a newline is no continuation), and a last line nothing ended is a
-; line when it has bytes.
+; The lines of a makefile: a backslash-newline continues the line (see
+; %mk-fold-go for the two readings), any other backslash and the byte
+; after it stand (so a doubled backslash before a newline is no
+; continuation), and a last line nothing ended is a line when it has bytes.
 (module mk/parse)
 (import mk/expand
   mk-args mk-expand mk-find mk-lx-lines-cell mk-lx-split mk-path
@@ -48,21 +48,72 @@
       ())
     (first mk-lx-lines-cell)))
 
+(def %mk-rtrim
+  (fn (_ s)
+    (def go
+      (fn (self i)
+        (if (<= i 0) 0
+          (if (mk-ws? (byte-at s (- i 1))) (self (- i 1)) i))))
+    (substring s 0 (go (byte-len s)))))
+
+; the pieces so far (newest first) without the whitespace that ends them
+(def %mk-fold-rtrim
+  (fn (self cur)
+    (if (null? cur) ()
+      (let ((t (%mk-rtrim (first cur))))
+        (if (= (byte-len t) 0) (self (rest cur)) (pair t (rest cur)))))))
+
+; a line whose first piece opens with a TAB is a recipe
+(def %mk-recipe-pieces?
+  (fn (self cur)
+    (if (null? cur) #f
+      (if (null? (rest cur))
+        (if (> (byte-len (first cur)) 0) (= (byte-at (first cur) 0) 9) #f)
+        (self (rest cur))))))
+
+; a text piece after a continuation: its leading whitespace goes (ws), or
+; one leading TAB, the recipe prefix (tab)
+(def %mk-fold-lead
+  (fn (_ tx tag lead)
+    (match
+      ((not (eq? tag (lit txt))) tx)
+      ((eq? lead (lit ws))
+        (let ((go (fn (self i)
+                    (if (>= i (byte-len tx)) i
+                      (if (mk-ws? (byte-at tx i)) (self (+ i 1)) i)))))
+          (substring tx (go 0) (byte-len tx))))
+      ((eq? lead (lit tab))
+        (if (if (> (byte-len tx) 0) (= (byte-at tx 0) 9) #f)
+          (substring tx 1 (byte-len tx))
+          tx))
+      (#t tx))))
+
+; POSIX's two readings of a backslash-newline: outside a recipe it and the
+; whitespace around it, consecutive ones included, are one space; in a
+; recipe it stands, the shell joining the lines, and the next line's
+; recipe prefix goes.  LEAD is what the last continuation asks of the
+; next piece: nil, ws or tab.
 (def %mk-fold-go
-  (fn (self ts cur acc)
+  (fn (self ts cur acc lead)
     (if (null? ts)
       (reverse (if (null? cur) acc (pair (string-concat (reverse cur)) acc)))
-      (let ((tag (first (first ts))))
+      (let ((tag (first (first ts))) (tx (first (rest (first ts)))))
         (match
           ((eq? tag (lit nl))
-            (self (rest ts) () (pair (string-concat (reverse cur)) acc)))
-          ((eq? tag (lit cont)) (self (rest ts) (pair " " cur) acc))
-          (#t (self (rest ts) (pair (first (rest (first ts))) cur) acc)))))))
+            (self (rest ts) () (pair (string-concat (reverse cur)) acc) ()))
+          ((eq? tag (lit cont))
+            (if (%mk-recipe-pieces? cur)
+              (self (rest ts) (pair "\\\n" cur) acc (lit tab))
+              (self (rest ts)
+                (if (eq? lead (lit ws)) cur (pair " " (%mk-fold-rtrim cur)))
+                acc (lit ws))))
+          (#t
+            (self (rest ts) (pair (%mk-fold-lead tx tag lead) cur) acc ())))))))
 
 (def %mk-fold-lines
   (fn (_ text)
     (if (= (byte-len text) 0) ()
-      (%mk-fold-go (lexer-read (%mk-lx-lines) text) () ()))))
+      (%mk-fold-go (lexer-read (%mk-lx-lines) text) () () ()))))
 
 ; the # comment strips from an UNQUOTED position (recipes keep theirs)
 (def %mk-strip-comment
