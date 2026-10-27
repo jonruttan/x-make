@@ -5,10 +5,10 @@ status as the value -- a case's last output line is the status.
 
 ## fixture
 
-### the scratch tree
+### the scratch tree, and a variable in the environment (read once a process, so before any run)
 
 ```make
-(do (proc-run (list "/bin/sh" "-c" "rm -rf /tmp/x-make-spec && mkdir -p /tmp/x-make-spec")) (file-write-all "/tmp/x-make-spec/Makefile" "X = world\nall: out.txt\n\t@echo hello $(X)\nout.txt:\n\t@printf made > out.txt\n%.o: %.c\n\t@cp $< $@\nlog: stamp\nstamp: dep\n\t@printf run >> log.txt\n\t@printf s > stamp\n.PHONY: all log\n") (file-write-all "/tmp/x-make-spec/a.c" "src") (file-write-all "/tmp/x-make-spec/b.c" "brc") (file-write-all "/tmp/x-make-spec/dep" "d") (display "made"))
+(do (Sys setenv "XMKE" "env") (proc-run (list "/bin/sh" "-c" "rm -rf /tmp/x-make-spec && mkdir -p /tmp/x-make-spec")) (file-write-all "/tmp/x-make-spec/Makefile" "X = world\nall: out.txt\n\t@echo hello $(X)\nout.txt:\n\t@printf made > out.txt\n%.o: %.c\n\t@cp $< $@\nlog: stamp\nstamp: dep\n\t@printf run >> log.txt\n\t@printf s > stamp\n.PHONY: all log\n") (file-write-all "/tmp/x-make-spec/a.c" "src") (file-write-all "/tmp/x-make-spec/b.c" "brc") (file-write-all "/tmp/x-make-spec/dep" "d") (display "made"))
 ```
 ---
     made
@@ -171,6 +171,100 @@ remade
 [a b c]
 d \
    e
+0
+```
+
+### a suffix rule makes the target from the stem plus a source suffix; an explicit rule with no recipe adds its prerequisites; $? names the newer ones
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.suf" ".SUFFIXES:\n.SUFFIXES: .o .c\n.c.o:\n\t@cp $< $@\n\t@echo $* [$<] [$?]\ns.o: s.h\n") (file-write-all "/tmp/x-make-spec/s.c" "src2") (file-write-all "/tmp/x-make-spec/s.h" "hdr") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.suf" "s.o"))) (newline) (proc-run (list "/bin/sh" "-c" "touch -t 200001010000 /tmp/x-make-spec/s.o /tmp/x-make-spec/s.h")) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.suf" "s.o"))) (newline) (display (file-read-all "/tmp/x-make-spec/s.o")))
+```
+---
+```output
+s [s.c] [s.c s.h]
+0
+s [s.c] [s.c]
+0
+src2
+```
+
+### a single-suffix rule makes a target from the target plus the suffix
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.single" ".sh:\n\t@cp $< $@\n") (file-write-all "/tmp/x-make-spec/tool.sh" "#!/bin/sh\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.single" "tool"))) (newline) (display (file-read-all "/tmp/x-make-spec/tool")))
+```
+---
+```output
+0
+#!/bin/sh
+```
+
+### != assigns a command's output, its newlines spaces
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.bang" "V != printf 'a\\nb\\n'\nshow:\n\t@echo [$(V)]\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.bang" "show"))))
+```
+---
+```output
+[a b]
+0
+```
+
+### .SILENT silences its targets' recipes, or every recipe when it names none
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.silent" ".SILENT: hush\nhush:\n\techo quiet\nloud:\n\techo loud\n") (file-write-all "/tmp/x-make-spec/Makefile.silent2" ".SILENT:\nall:\n\techo all\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.silent" "hush" "loud"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.silent2"))))
+```
+---
+```output
+quiet
+echo loud
+loud
+0
+all
+0
+```
+
+### -k keeps going past a failed target; without it the first failure ends the run
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.keep" "all: bad good\nbad:\n\t@false\ngood:\n\t@echo good\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.keep" "-k" "all"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.keep" "all"))))
+```
+---
+```output
+make: recipe for bad failed
+good
+make: target all not remade because of errors
+2
+make: recipe for bad failed
+2
+```
+
+### -i forgives every failing command, as a - prefix does
+
+```make
+(display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.keep" "-i" "bad")))
+```
+---
+```output
+make: [ignored] recipe failed: false
+0
+```
+
+### the environment is a default the makefile overrides; -e lets it override the makefile; the command line beats both
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.env" "XMKE = file\nshow:\n\t@echo $(XMKE)\n") (file-write-all "/tmp/x-make-spec/Makefile.env2" "show:\n\t@echo $(XMKE)\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.env2" "show"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.env" "show"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.env" "-e" "show"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.env" "-e" "XMKE=cli" "show"))))
+```
+---
+```output
+env
+0
+file
+0
+env
+0
+cli
 0
 ```
 

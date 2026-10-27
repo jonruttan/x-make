@@ -9,7 +9,8 @@
 ; The variable table is a BOX of ((name . (LABEL . text)) ...): label rec
 ; expands at every use (=), simple expanded once at assignment (:=),
 ; lock a command-line override no file assignment may touch.  The
-; automatics ($@ $< $^ $*) ride in as an overlay alist checked first.
+; automatics ($@ $< $^ $* $?) ride in as an overlay alist checked first.
+; A reference NAME:SUF=REP is the suffix substitution every make reads.
 ;
 ; Functions carried: shell wildcard findstring if subst patsubst
 ; basename dir notdir strip -- the set the measured Makefiles use, plus
@@ -151,6 +152,19 @@
         (self (rest ts) (first (rest (first ts))) acc)))))
 (def mk-pieces
   (fn (_ ts) (%mk-pieces-go ts () ())))
+
+; the first byte B that is outside $(...) -- a rule line's :, an
+; assignment's =, an environment entry's = -- or -1: the length of the
+; first piece of the split at B, when a B followed it.  A byte walk in x
+; costs tens of kilobytes a byte on an engine without automatic
+; collection; this is one native read.
+(def mk-top-at
+  (fn (_ s b)
+    (if (= (byte-len s) 0) (- 0 1)
+      (let ((cut (mk-pieces (lexer-read (mk-lx-split b) s))))
+        (if (if (rest cut) #t (pair? (rest (first cut))))
+          (byte-len (first (first cut)))
+          (- 0 1))))))
 
 ; the texts of a run of tokens that has no separators
 (def %mk-run-texts
@@ -314,6 +328,16 @@
                  (string-append dirpart (string-append "/" n))))
           (%mk-sort names))))))
 
+; --- the shell ---------------------------------------------------------------
+
+; CMD's standard output, run through /bin/sh under the -C prefix
+(def mk-shell-capture
+  (fn (_ cmd)
+    (def full (if (= (byte-len (mk-cwd)) 0) cmd
+                (string-append "cd " (string-append (mk-cwd)
+                  (string-append " && " cmd)))))
+    (rest (proc-capture (list "/bin/sh" "-c" full)))))
+
 ; --- expansion ---------------------------------------------------------------
 
 (def mk-expand ())
@@ -360,13 +384,11 @@
             (substring inner (+ (byte-len nm) 1) (byte-len inner))))))
     (match
       ((%mk-fn-name? inner "shell")
-        (let ((cmd (mk-expand (first (call "shell")) vars autos)))
-          (def full (if (= (byte-len (mk-cwd)) 0) cmd
-                      (string-append "cd " (string-append (mk-cwd)
-                        (string-append " && " cmd)))))
-          (def r (proc-capture (list "/bin/sh" "-c" full)))
-          ; GNU: trailing newlines dropped, interior newlines to spaces
-          (mk-join (mk-words (rest r)) " ")))
+        ; GNU: trailing newlines dropped, interior newlines to spaces
+        (mk-join
+          (mk-words
+            (mk-shell-capture (mk-expand (first (call "shell")) vars autos)))
+          " "))
       ((%mk-fn-name? inner "wildcard")
         (let ((pats (mk-words (mk-expand (first (call "wildcard")) vars autos))))
           (def go
@@ -418,7 +440,32 @@
       ; a variable reference; a computed name expands first
       (let ((name (if (< (mk-find inner "$") 0) inner
                     (mk-expand inner vars autos))))
-        (%mk-lookup name vars autos))))))
+        (%mk-ref name vars autos))))))
+
+; NAME, or the substitution reference NAME:SUF=REP, the reading POSIX, GNU
+; and BSD share: every word of the value that ends in SUF ends in REP
+; instead, and an empty SUF is the end of every word
+(def %mk-ref
+  (fn (_ name vars autos)
+    (def colon (mk-find name ":"))
+    (def eq (if (< colon 0) (- 0 1)
+              (mk-find (substring name colon (byte-len name)) "=")))
+    (if (< eq 0)
+      (%mk-lookup name vars autos)
+      (let ((suf (substring name (+ colon 1) (+ colon eq))))
+        (def rep (substring name (+ (+ colon eq) 1) (byte-len name)))
+        (mk-join
+          (map (fn (_ w) (%mk-suffix-one w suf rep))
+            (mk-words (%mk-lookup (substring name 0 colon) vars autos)))
+          " ")))))
+
+(def %mk-suffix-one
+  (fn (_ w suf rep)
+    (def lw (byte-len w))
+    (def ls (byte-len suf))
+    (if (if (>= lw ls) (string=? (substring w (- lw ls) lw) suf) #f)
+      (string-append (substring w 0 (- lw ls)) rep)
+      w)))
 
 (def %mk-last-slash
   (fn (_ w)
@@ -515,5 +562,5 @@
 
 (provide mk/expand
   mk-args mk-cwd mk-expand mk-find mk-join mk-lx-lines-cell mk-lx-split
-  mk-path mk-pieces mk-subst mk-trim mk-var-entry mk-var-set! mk-words
-  mk-ws? mk-cwd!)
+  mk-path mk-pieces mk-shell-capture mk-subst mk-top-at mk-trim
+  mk-var-entry mk-var-set! mk-words mk-ws? mk-cwd!)

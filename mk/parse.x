@@ -14,11 +14,14 @@
 ;
 ; What a line can be: TAB-led recipe (attached to the current rule),
 ; blank or comment, ifeq/ifneq/ifdef/ifndef/else/endif, include /
-; -include, NAME = | := | ?= | += VALUE, or TARGETS : PREREQS.
+; -include, NAME = | := | ?= | += | != VALUE, or TARGETS : PREREQS.
+; The special targets .PHONY, .SILENT and .SUFFIXES collect their
+; prerequisites instead of becoming rules.
 ;
-; The parse STATE is a box list: (vars rules-rev phony cur-or-())
-; where cur = (targets prereqs recipes-rev); finishing a rule pushes
-; it.  Conditional stack entries: (taking? seen-true? parent-active?).
+; The parse STATE is a box list: (vars rules-rev phony cur-or-() silent
+; suffixes) where cur = (targets prereqs recipes-rev); finishing a rule
+; pushes it.  Conditional stack entries: (taking? seen-true?
+; parent-active?).
 
 ; The lines of a makefile: a backslash-newline continues the line (see
 ; %mk-fold-go for the two readings), any other backslash and the byte
@@ -26,8 +29,8 @@
 ; continuation), and a last line nothing ended is a line when it has bytes.
 (module mk/parse)
 (import mk/expand
-  mk-args mk-expand mk-find mk-lx-lines-cell mk-lx-split mk-path
-  mk-pieces mk-trim mk-var-entry mk-var-set! mk-words mk-ws?)
+  mk-args mk-expand mk-find mk-lx-lines-cell mk-path mk-shell-capture
+  mk-subst mk-top-at mk-trim mk-var-entry mk-var-set! mk-words mk-ws?)
 (import mk/prims
   append byte-at byte-len file-exists? file-read-all lexer-escape
   lexer-make lexer-read lexer-run lexer-table reverse set-first!
@@ -130,21 +133,14 @@
           (mk-ws? (byte-at s lw)))
         #f))))
 
-; the first : that is outside $(...) -- a rule line's split point, or -1:
-; the length of the first piece of the split at :, when a : followed it
-(def %mk-rule-colon
-  (fn (_ s)
-    (if (= (byte-len s) 0) (- 0 1)
-      (let ((cut (mk-pieces (lexer-read (mk-lx-split 58) s))))
-        (if (if (rest cut) #t (pair? (rest (first cut))))
-          (byte-len (first (first cut)))
-          (- 0 1))))))
+; the first : outside $(...) -- a rule line's split point, or -1
+(def %mk-rule-colon (fn (_ s) (mk-top-at s 58)))
 
 ; NAME op VALUE: answers (name label value) or nil; labels rec simple
-; cond append
+; cond append shell
 (def %mk-parse-assign
   (fn (_ s)
-    (def at (mk-find s "="))
+    (def at (mk-top-at s 61))
     (if (< at 0) ()
       (let ((colon (%mk-rule-colon s)))
         ; a rule's colon before the = means this is a rule, not an
@@ -157,6 +153,7 @@
                 ((= prev 58) (lit simple))                  ; :=
                 ((= prev 63) (lit cond))                    ; ?=
                 ((= prev 43) (lit append))                  ; +=
+                ((= prev 33) (lit shell))                   ; !=
                 (#t (lit rec))))
             (def name-end (if (eq? label (lit rec)) at (- at 1)))
             (def name (mk-trim (substring s 0 name-end)))
@@ -333,9 +330,23 @@
             (mk-var-set! vars name (lit rec) text)
             (mk-var-set! vars name (first (rest e))
               (string-append (rest (rest e)) (string-append " " text))))))
+      ((eq? label (lit shell))
+        (mk-var-set! vars name (lit rec)
+          (%mk-shell-value (mk-shell-capture (mk-expand text vars ())))))
       (#t (mk-var-set! vars name (lit rec) text)))))
 
-; a rule line: close the previous rule, open this one; .PHONY collects
+; what != assigns, POSIX's reading: the command's output with its trailing
+; newlines gone and every other newline a space
+(def %mk-shell-value
+  (fn (_ out)
+    (def go
+      (fn (self i)
+        (if (<= i 0) 0
+          (if (= (byte-at out (- i 1)) 10) (self (- i 1)) i))))
+    (mk-subst "\n" " " (substring out 0 (go (byte-len out))))))
+
+; a rule line: close the previous rule, open this one; the special targets
+; collect instead
 (def %mk-rule-line!
   (fn (_ st bare colon)
     (def vars (first st))
@@ -344,24 +355,50 @@
     (def prereqs
       (mk-words
         (mk-expand (substring bare (+ colon 1) (byte-len bare)) vars ())))
+    (def special (if (pair? targets) (first targets) ""))
     (%mk-close-rule! st)
-    (if (if (pair? targets) (string=? (first targets) ".PHONY") #f)
-      (set-first! (rest (rest st))
-        (append prereqs (first (rest (rest st)))))
-      (if (null? targets)
-        ()
+    (match
+      ((null? targets) ())
+      ((string=? special ".PHONY")
+        (set-first! (rest (rest st))
+          (append prereqs (first (rest (rest st))))))
+      ((string=? special ".SILENT") (%mk-silent! st prereqs))
+      ((string=? special ".SUFFIXES") (%mk-suffixes! st prereqs))
+      (#t
         (set-first! (rest (rest (rest st)))
           (list targets prereqs ()))))))
 
-; the entry: text to (vars-box rules phony), rules in file order
+; .SILENT with no prerequisites silences every recipe (the box holds all);
+; with some, theirs
+(def %mk-silent!
+  (fn (_ st prereqs)
+    (def box (rest (rest (rest (rest st)))))
+    (match
+      ((null? prereqs) (set-first! box (lit all)))
+      ((eq? (first box) (lit all)) ())
+      (#t (set-first! box (append (first box) prereqs))))))
+
+; .SUFFIXES with no prerequisites clears the list; with some, appends
+(def %mk-suffixes!
+  (fn (_ st prereqs)
+    (def box (rest (rest (rest (rest (rest st))))))
+    (set-first! box (if (null? prereqs) () (append (first box) prereqs)))))
+
+; the suffixes every make knows before a makefile adds its own
+(def mk-default-suffixes (list ".o" ".c" ".y" ".l" ".s" ".sh"))
+
+; the entry: text to (vars-box rules phony silent suffixes), rules in file
+; order
 (def mk-parse
   (fn (_ text vars)
-    (def st (list vars () () ()))
+    (def st (list vars () () () () mk-default-suffixes))
     (%mk-parse-lines! (%mk-fold-lines text) st ())
     (%mk-close-rule! st)
     (list vars
       (reverse (first (rest st)))
-      (first (rest (rest st))))))
+      (first (rest (rest st)))
+      (first (rest (rest (rest (rest st)))))
+      (first (rest (rest (rest (rest (rest st)))))))))
 
 (provide mk/parse
   mk-parse)
