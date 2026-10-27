@@ -135,6 +135,96 @@ zed: a.c b.c
 0
 ```
 
+## what x-lang's and the engine's Makefiles write
+
+### else ifeq on one line: the ladder takes the first true branch, and one only
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.ladder" "ifeq ($(X),a)\nY = one\nelse ifeq ($(X),b)\nY = two\nelse ifneq ($(X),c)\nY = other\nelse\nY = three\nendif\nshow:\n\t@echo $(Y)\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.ladder" "X=a" "show"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.ladder" "X=b" "show"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.ladder" "X=c" "show"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.ladder" "X=d" "show"))))
+```
+---
+```output
+one
+0
+two
+0
+three
+0
+other
+0
+```
+
+### ** in a wildcard is *: one directory down, every subdirectory, each sorted
+
+```make
+(do (proc-run (list "/bin/sh" "-c" "mkdir -p /tmp/x-make-spec/src/b /tmp/x-make-spec/src/a && touch /tmp/x-make-spec/src/top.c /tmp/x-make-spec/src/b/y.c /tmp/x-make-spec/src/b/x.c /tmp/x-make-spec/src/a/z.c")) (file-write-all "/tmp/x-make-spec/Makefile.glob" "S = $(wildcard src/*.c src/**/*.c ./src/a/z.c src/nope.c)\nshow:\n\t@echo $(S)\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.glob" "show"))))
+```
+---
+```output
+src/top.c src/a/z.c src/b/x.c src/b/y.c ./src/a/z.c
+0
+```
+
+### CC is cc unless the makefile or the command line says otherwise; ?= leaves it
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.cc" "CC?=gcc\nshow:\n\t@echo $(CC)\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.cc" "show"))) (newline) (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.cc" "CC=clang" "show"))))
+```
+---
+```output
+cc
+0
+clang
+0
+```
+
+### a static pattern rule: every target its own stem, the recipe shared
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.static" "OBJS = a.o b.o\nall: $(OBJS)\n$(OBJS): %.o: %.c\n\t@echo $* $< $@\n.PHONY: all a.o b.o\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.static" "all"))))
+```
+---
+```output
+a a.c a.o
+b b.c b.o
+0
+```
+
+### MAKEFILE_LIST names the makefile, then what it included
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.list" "include inc.mk\nshow:\n\t@echo [$(MAKEFILE_LIST)]\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.list" "show"))))
+```
+---
+```output
+[ Makefile.list inc.mk]
+0
+```
+
+### a prerequisite that was remade remakes its dependent: FORCE, with no file behind it
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.force" "stamp: FORCE\n\t@echo remade\nFORCE:\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.force" "stamp"))))
+```
+---
+```output
+remade
+0
+```
+
+### a continuation outside a recipe condenses the whitespace around it; in a recipe it stands
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.cont2" "V = a \\\n\t\tb \\\n\t\tc\nshow:\n\t@echo \"[$(V)]\"\n\t@printf '%s\\n' 'd \\\n\t   e'\n") (display (mk-run (list "-C" "/tmp/x-make-spec" "-f" "Makefile.cont2" "show"))))
+```
+---
+```output
+[a b c]
+d \
+   e
+0
+```
+
 ### cleanup
 
 ```make

@@ -54,6 +54,9 @@
 (def file-read-all (fn (_ path) (File read-all path)))
 (def file-write-all (fn (_ path text) (File write-all path text)))
 (def file-exists? (fn (_ path) (File exists? path)))
+(def file-dir?
+  (fn (_ path)
+    (if (File exists? path) (eq? (File type path) (lit dir)) #f)))
 (def file-unlink (fn (_ path) (File unlink path)))
 (def file-list-dir (fn (_ path) (File list-dir path)))
 
@@ -92,7 +95,7 @@
 (def lexer-read (fn (_ l s) (l read-str s)))
 
 (provide mk/prims
-  append byte-at byte-len char->integer file-exists? file-list-dir
+  append byte-at byte-len char->integer file-dir? file-exists? file-list-dir
   file-read-all file-stat-mtime file-unlink file-write-all filter
   integer->char length lexer-escape lexer-make lexer-nested lexer-read
   lexer-run lexer-skip lexer-table lexer-word list->string map

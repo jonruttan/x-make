@@ -10,17 +10,23 @@ The scope is the measured one: the GNU subset x-lang's own Makefiles
 use (see `docs/bootstrap-closure.md` for the measurement method).
 Working: rules with prerequisites and tab recipes; `=`, `:=`, `?=`,
 `+=`; `$(VAR)`, `$X`, `$$`, computed names; the functions `shell`
-`wildcard` `findstring` `if` `subst` `patsubst` `basename` `dir`
-`notdir` `strip`; `ifeq`/`ifneq`/`ifdef`/`ifndef`/`else`/`endif`;
-`include`/`-include`; pattern rules (`%.o: %.c`) with `$@ $< $^ $*`;
-`.PHONY`; mtime-driven rebuilds (whole-second granularity); `@` and
-`-` recipe prefixes; `-C`, `-f`, `-n`, `-s`, command-line `VAR=value`
-overrides (which lock); statuses 0/2.  There is NO chdir anywhere:
-`-C` prefixes paths and runs recipes under `cd DIR &&`.
+`wildcard` (`**` reads as `*`, one directory, as GNU's glob does)
+`findstring` `if` `subst` `patsubst` `basename` `dir` `notdir` `strip`
+`sort`; `ifeq`/`ifneq`/`ifdef`/`ifndef`/`else`/`else ifeq`/`endif`;
+`include`/`-include`; pattern rules (`%.o: %.c`) and static pattern
+rules (`$(OBJS): %.o: %.c`) with `$@ $< $^ $*`; `.PHONY`; a `FORCE:`
+prerequisite; `$(MAKEFILE_LIST)`; `CC` defaulting to `cc`; mtime-driven
+rebuilds (whole-second granularity); `@` and `-` recipe prefixes; `-C`,
+`-f`, `-n`, `-s`, command-line `VAR=value` overrides (which lock);
+statuses 0/2.  `-w`, `--print-directory` and `--no-print-directory`
+are taken so a `$(MAKE)` line written for GNU make passes, and do
+nothing: this make never prints a directory.  There is NO chdir
+anywhere: `-C` prefixes paths and runs recipes under `cd DIR &&`.
 
-Not built, loudly absent rather than wrong: `$(MAKEFILE_LIST)` and the
-other automatic variables beyond the four, suffix rules, `VPATH`,
-parallel `-j`, `define`, `export`, double-colon rules.
+Not built, loudly absent rather than wrong: the automatic variables
+beyond the four, suffix rules, `VPATH`, parallel `-j`, `define`,
+`export`, double-colon rules, the other default variables (`CXX`,
+`AR`, `RM`...), and running `$(MAKE)` lines under `-n`.
 
 Paired with x-lang v0.39.0 (`lang.xon` is the checkable row).
 

@@ -13,24 +13,27 @@
 ; cond-stack), with include splicing lines in place.
 ;
 ; What a line can be: TAB-led recipe (attached to the current rule),
-; blank or comment, ifeq/ifneq/ifdef/ifndef/else/endif, include /
-; -include, NAME = | := | ?= | += VALUE, or TARGETS : PREREQS.
+; blank or comment, ifeq/ifneq/ifdef/ifndef/else/endif (an else may
+; carry the next ifeq), include / -include, NAME = | := | ?= | += VALUE,
+; TARGETS : PREREQS, or TARGETS : PATTERN : PREREQ-PATTERNS.
 ;
 ; The parse STATE is a box list: (vars rules-rev phony cur-or-())
-; where cur = (targets prereqs recipes-rev); finishing a rule pushes
-; it.  Conditional stack entries: (taking? seen-true? parent-active?).
+; where cur = (heads recipes-rev), a head (targets prereqs stem);
+; finishing a rule pushes one rule a head.  Conditional stack entries:
+; (taking? seen-true? parent-active?).
 
-; The lines of a makefile: a backslash-newline joins with a single space,
-; any other backslash and the byte after it stand (so a doubled backslash
-; before a newline is no continuation), and a last line nothing ended is a
-; line when it has bytes.
+; The lines of a makefile: a backslash-newline continues the line (see
+; %mk-fold-go for the two readings), any other backslash and the byte
+; after it stand (so a doubled backslash before a newline is no
+; continuation), and a last line nothing ended is a line when it has bytes.
 (module mk/parse)
 (import mk/expand
-  mk-args mk-expand mk-find mk-lx-lines-cell mk-lx-split mk-path
-  mk-pieces mk-trim mk-var-entry mk-var-set! mk-words mk-ws?)
+  mk-args mk-expand mk-find mk-lx-lines-cell mk-lx-split mk-pat-stem
+  mk-path mk-pieces mk-subst mk-trim mk-var-append! mk-var-entry
+  mk-var-set! mk-words mk-ws?)
 (import mk/prims
   append byte-at byte-len file-exists? file-read-all lexer-escape
-  lexer-make lexer-read lexer-run lexer-table reverse set-first!
+  lexer-make lexer-read lexer-run lexer-table map reverse set-first!
   string-append string-concat string=? substring)
 (def %mk-lx-lines
   (fn (_)
@@ -48,21 +51,72 @@
       ())
     (first mk-lx-lines-cell)))
 
+(def %mk-rtrim
+  (fn (_ s)
+    (def go
+      (fn (self i)
+        (if (<= i 0) 0
+          (if (mk-ws? (byte-at s (- i 1))) (self (- i 1)) i))))
+    (substring s 0 (go (byte-len s)))))
+
+; the pieces so far (newest first) without the whitespace that ends them
+(def %mk-fold-rtrim
+  (fn (self cur)
+    (if (null? cur) ()
+      (let ((t (%mk-rtrim (first cur))))
+        (if (= (byte-len t) 0) (self (rest cur)) (pair t (rest cur)))))))
+
+; a line whose first piece opens with a TAB is a recipe
+(def %mk-recipe-pieces?
+  (fn (self cur)
+    (if (null? cur) #f
+      (if (null? (rest cur))
+        (if (> (byte-len (first cur)) 0) (= (byte-at (first cur) 0) 9) #f)
+        (self (rest cur))))))
+
+; a text piece after a continuation: its leading whitespace goes (ws), or
+; one leading TAB, the recipe prefix (tab)
+(def %mk-fold-lead
+  (fn (_ tx tag lead)
+    (match
+      ((not (eq? tag (lit txt))) tx)
+      ((eq? lead (lit ws))
+        (let ((go (fn (self i)
+                    (if (>= i (byte-len tx)) i
+                      (if (mk-ws? (byte-at tx i)) (self (+ i 1)) i)))))
+          (substring tx (go 0) (byte-len tx))))
+      ((eq? lead (lit tab))
+        (if (if (> (byte-len tx) 0) (= (byte-at tx 0) 9) #f)
+          (substring tx 1 (byte-len tx))
+          tx))
+      (#t tx))))
+
+; GNU's two readings of a backslash-newline: outside a recipe it and the
+; whitespace around it, consecutive ones included, are one space; in a
+; recipe it stands, the shell joining the lines, and the next line's
+; recipe prefix goes.  LEAD is what the last continuation asks of the
+; next piece: nil, ws or tab.
 (def %mk-fold-go
-  (fn (self ts cur acc)
+  (fn (self ts cur acc lead)
     (if (null? ts)
       (reverse (if (null? cur) acc (pair (string-concat (reverse cur)) acc)))
-      (let ((tag (first (first ts))))
+      (let ((tag (first (first ts))) (tx (first (rest (first ts)))))
         (match
           ((eq? tag (lit nl))
-            (self (rest ts) () (pair (string-concat (reverse cur)) acc)))
-          ((eq? tag (lit cont)) (self (rest ts) (pair " " cur) acc))
-          (#t (self (rest ts) (pair (first (rest (first ts))) cur) acc)))))))
+            (self (rest ts) () (pair (string-concat (reverse cur)) acc) ()))
+          ((eq? tag (lit cont))
+            (if (%mk-recipe-pieces? cur)
+              (self (rest ts) (pair "\\\n" cur) acc (lit tab))
+              (self (rest ts)
+                (if (eq? lead (lit ws)) cur (pair " " (%mk-fold-rtrim cur)))
+                acc (lit ws))))
+          (#t
+            (self (rest ts) (pair (%mk-fold-lead tx tag lead) cur) acc ())))))))
 
 (def %mk-fold-lines
   (fn (_ text)
     (if (= (byte-len text) 0) ()
-      (%mk-fold-go (lexer-read (%mk-lx-lines) text) () ()))))
+      (%mk-fold-go (lexer-read (%mk-lx-lines) text) () () ()))))
 
 ; the # comment strips from an UNQUOTED position (recipes keep theirs)
 (def %mk-strip-comment
@@ -134,21 +188,31 @@
 
 ; --- the fold ----------------------------------------------------------------
 
-; finish the current rule into the rules list
+; finish the current rule into the rules list: one rule a head, the
+; recipes shared, in the heads' order
 (def %mk-close-rule!
   (fn (_ st)
     (def cur (first (rest (rest (rest st)))))
     (if (null? cur) ()
-      (set-first! (rest st)
-        (pair
-          (list (first cur)
-            (first (rest cur))
-            (reverse (first (rest (rest cur)))))
-          (first (rest st)))))
+      (let ((recipes (reverse (first (rest cur)))))
+        (def push
+          (fn (self hs)
+            (if (null? hs) ()
+              (do (set-first! (rest st)
+                    (pair
+                      (list (first (first hs))
+                        (first (rest (first hs)))
+                        recipes
+                        (first (rest (rest (first hs)))))
+                      (first (rest st))))
+                  (self (rest hs))))))
+        (push (first cur))))
     (set-first! (rest (rest (rest st))) ())))
 
 ; st: (vars-box rules-box phony-box cur-box); cur = () or
-; (targets prereqs recipes-rev)
+; (heads recipes-rev), a head (targets prereqs stem): one head for a
+; plain rule, one a target for a static pattern rule, whose stem is the
+; target's.  A rule is (targets prereqs recipes stem).
 (def %mk-line! ())
 
 (def %mk-parse-lines!
@@ -167,14 +231,49 @@
 (def %mk-c-push
   (fn (_ v active conds) (pair (list v v active) conds)))
 
+; a line that opens a conditional: ifeq ifneq ifdef ifndef
+(def %mk-cond-line?
+  (fn (_ line)
+    (match
+      ((%mk-starts? line "ifeq") #t)
+      ((%mk-starts? line "ifneq") #t)
+      ((%mk-starts? line "ifdef") #t)
+      (#t (%mk-starts? line "ifndef")))))
+
+; the conditional's value; only called where the branch can be taken, so
+; an inactive ifeq runs none of its $(shell)
+(def %mk-cond-value
+  (fn (_ line vars)
+    (match
+      ((%mk-starts? line "ifeq")
+        (%mk-cond-eq? (substring line 4 (byte-len line)) vars))
+      ((%mk-starts? line "ifneq")
+        (not (%mk-cond-eq? (substring line 5 (byte-len line)) vars)))
+      ((%mk-starts? line "ifdef")
+        (%mk-cond-def? (substring line 5 (byte-len line)) vars))
+      (#t (not (%mk-cond-def? (substring line 6 (byte-len line)) vars))))))
+
+; else, and else ifeq (A,B) on one line (the other three keywords too): the
+; frame takes the branch not yet taken, narrowed by the condition where
+; one follows; after a bare else the ladder is closed
 (def %mk-c-else
-  (fn (_ conds)
+  (fn (_ line vars conds)
     (if (null? conds)
       (Err raise (lit make) "make: else without if" ())
       (let ((frame (first conds)))
+        (def seen (first (rest frame)))
         (def parent (first (rest (rest frame))))
+        (def open (if parent (not seen) #f))
+        (def tail
+          (mk-trim (%mk-strip-comment (substring line 4 (byte-len line)))))
+        (def taking
+          (match
+            ((= (byte-len tail) 0) open)
+            ((%mk-cond-line? tail) (if open (%mk-cond-value tail vars) #f))
+            (#t (Err raise (lit make)
+                  (string-append "make: extraneous text after else: " tail) ()))))
         (pair
-          (list (if parent (not (first (rest frame))) #f) #t parent)
+          (list taking (if (= (byte-len tail) 0) #t (if seen #t taking)) parent)
           (rest conds))))))
 
 (def %mk-c-endif
@@ -188,22 +287,22 @@
     (def cur (first (rest (rest (rest st)))))
     (if (null? cur)
       (Err raise (lit make) "make: recipe before any target" ())
-      (do (set-first! (rest (rest cur))
-            (pair (substring line 1 (byte-len line))
-              (first (rest (rest cur)))))
+      (do (set-first! (rest cur)
+            (pair (substring line 1 (byte-len line)) (first (rest cur))))
           conds))))
 
 (def %mk-c-include
   (fn (_ bare st conds)
     (def vars (first st))
     (def optional (= (byte-at bare 0) 45))
-    (def path
-      (mk-path
-        (mk-trim
-          (mk-expand (substring bare (if optional 8 7) (byte-len bare))
-            vars ()))))
+    (def name
+      (mk-trim
+        (mk-expand (substring bare (if optional 8 7) (byte-len bare))
+          vars ())))
+    (def path (mk-path name))
     (if (file-exists? path)
-      (do (%mk-parse-lines! (%mk-fold-lines (file-read-all path)) st ())
+      (do (mk-var-append! vars "MAKEFILE_LIST" (string-append " " name))
+          (%mk-parse-lines! (%mk-fold-lines (file-read-all path)) st ())
           conds)
       (if optional
         conds
@@ -237,29 +336,9 @@
     (def vars (first st))
     (def active (%mk-conds-active? conds))
     (match
-      ((%mk-starts? line "ifeq")
-        (%mk-c-push
-          (if active (%mk-cond-eq? (substring line 4 (byte-len line)) vars) #f)
-          active conds))
-      ((%mk-starts? line "ifneq")
-        (%mk-c-push
-          (if active
-            (not (%mk-cond-eq? (substring line 5 (byte-len line)) vars))
-            #f)
-          active conds))
-      ((%mk-starts? line "ifdef")
-        (%mk-c-push
-          (if active
-            (%mk-cond-def? (substring line 5 (byte-len line)) vars)
-            #f)
-          active conds))
-      ((%mk-starts? line "ifndef")
-        (%mk-c-push
-          (if active
-            (not (%mk-cond-def? (substring line 6 (byte-len line)) vars))
-            #f)
-          active conds))
-      ((%mk-starts? line "else") (%mk-c-else conds))
+      ((%mk-cond-line? line)
+        (%mk-c-push (if active (%mk-cond-value line vars) #f) active conds))
+      ((%mk-starts? line "else") (%mk-c-else line vars conds))
       ((%mk-starts? line "endif") (%mk-c-endif conds))
       ((not active) conds)
       ((if (> (byte-len line) 0) (= (byte-at line 0) 9) #f)
@@ -284,23 +363,51 @@
               (string-append (rest (rest e)) (string-append " " text))))))
       (#t (mk-var-set! vars name (lit rec) text)))))
 
-; a rule line: close the previous rule, open this one; .PHONY collects
+; TARGETS: PATTERN: PREREQ-PATTERNS, a static pattern rule: a head a
+; target, its stem the target's against PATTERN, its prerequisites the
+; patterns with the stem in place of %
+(def %mk-static-heads
+  (fn (_ targets pattern pre-text)
+    (def pres (mk-words pre-text))
+    (map
+      (fn (_ t)
+        (let ((stem (mk-pat-stem t pattern)))
+          (if (null? stem)
+            (Err raise (lit make)
+              (string-append "make: target "
+                (string-append t " does not match the target pattern"))
+              ())
+            (list (list t) (map (fn (_ p) (mk-subst "%" stem p)) pres) stem))))
+      targets)))
+
+; a rule line: close the previous rule, open this one; .PHONY collects; a
+; second top-level colon makes it a static pattern rule
 (def %mk-rule-line!
   (fn (_ st bare colon)
     (def vars (first st))
     (def targets
       (mk-words (mk-expand (substring bare 0 colon) vars ())))
-    (def prereqs
-      (mk-words
-        (mk-expand (substring bare (+ colon 1) (byte-len bare)) vars ())))
+    (def right (substring bare (+ colon 1) (byte-len bare)))
+    (def colon2 (%mk-rule-colon right))
     (%mk-close-rule! st)
-    (if (if (pair? targets) (string=? (first targets) ".PHONY") #f)
-      (set-first! (rest (rest st))
-        (append prereqs (first (rest (rest st)))))
-      (if (null? targets)
-        ()
+    (match
+      ((if (pair? targets) (string=? (first targets) ".PHONY") #f)
+        (set-first! (rest (rest st))
+          (append (mk-words (mk-expand right vars ()))
+            (first (rest (rest st))))))
+      ((null? targets) ())
+      ((< colon2 0)
         (set-first! (rest (rest (rest st)))
-          (list targets prereqs ()))))))
+          (list (list (list targets (mk-words (mk-expand right vars ())) ()))
+            ())))
+      (#t
+        (set-first! (rest (rest (rest st)))
+          (list
+            (%mk-static-heads targets
+              (mk-trim (mk-expand (substring right 0 colon2) vars ()))
+              (mk-expand (substring right (+ colon2 1) (byte-len right))
+                vars ()))
+            ()))))))
 
 ; the entry: text to (vars-box rules phony), rules in file order
 (def mk-parse

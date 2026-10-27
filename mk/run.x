@@ -6,10 +6,10 @@
 ; @copyright 2026 Jon Ruttan
 ; @license MIT No Attribution (MIT-0)
 ;
-; The rebuild rule, POSIX's: a target rebuilds when it does not exist
-; or any prerequisite's mtime is STRICTLY newer (equal seconds means
-; up to date -- mtimes are whole seconds here).  .PHONY targets always
-; run.  Recipes run one line at a time through /bin/sh -c, under
+; The rebuild rule, POSIX's: a target rebuilds when it does not exist,
+; a prerequisite was remade, or any prerequisite's mtime is STRICTLY
+; newer (equal seconds means up to date -- mtimes are whole seconds
+; here).  .PHONY targets always run.  Recipes run one line at a time through /bin/sh -c, under
 ; `cd PREFIX &&` when -C gave one; @ silences the echo, - forgives the
 ; status.  Automatic variables: $@ $< $^ $*.
 
@@ -111,12 +111,15 @@
 ; build TARGET; answers (built? . status).  VISITING guards cycles.
 (def mk-build ())
 
+; build each of TS in turn; answers (any-built? . status), stopping at
+; the first failure
 (def %mk-build-list
-  (fn (self ts vars rules phony visiting)
-    (if (null? ts) 0
+  (fn (self ts vars rules phony visiting any)
+    (if (null? ts) (pair any 0)
       (let ((r (mk-build (first ts) vars rules phony visiting)))
-        (if (> (rest r) 0) (rest r)
-          (self (rest ts) vars rules phony visiting))))))
+        (if (> (rest r) 0) r
+          (self (rest ts) vars rules phony visiting
+            (if (first r) #t any)))))))
 
 (def %mk-member?
   (fn (_ x l)
@@ -133,7 +136,11 @@
         (string-append "make: circular dependency on " target) ())
       (let ((explicit (%mk-find-rule rules target)))
         (def pm (if (null? explicit) (%mk-find-pattern rules target) ()))
-        (def stem (if (null? pm) () (first pm)))
+        ; a static pattern rule's instance carries its stem
+        (def stem
+          (if (null? explicit)
+            (if (null? pm) () (first pm))
+            (first (rest (rest (rest explicit))))))
         (def rule (if (null? explicit) (if (null? pm) () (rest pm)) explicit))
         (if (null? rule)
           (if (file-exists? (mk-path target))
@@ -144,21 +151,26 @@
                       (string-append target "\n")))
                   2)))
           (let ((prereqs
-                  (if (null? stem)
+                  (if (null? pm)
                     (first (rest rule))
                     (map (fn (_ p) (mk-subst "%" stem p))
                       (first (rest rule))))))
-            (def pst
+            (def pre
               (%mk-build-list prereqs vars rules phony
-                (pair target visiting)))
-            (if (> pst 0)
-              (pair #f pst)
+                (pair target visiting) #f))
+            (if (> (rest pre) 0)
+              (pair #f (rest pre))
               (let ((mine (file-stat-mtime (mk-path target))))
+                ; remade when phony, absent, a prerequisite was remade
+                ; (so FORCE: with no file behind it remakes its
+                ; dependents, GNU's idiom) or one is newer
                 (def need
-                  (if (%mk-phony? phony target) #t
-                    (if (null? mine) #t
-                      (let ((np (%mk-newest prereqs ())))
-                        (if (null? np) #f (> np mine))))))
+                  (match
+                    ((%mk-phony? phony target) #t)
+                    ((null? mine) #t)
+                    ((first pre) #t)
+                    (#t (let ((np (%mk-newest prereqs ())))
+                          (if (null? np) #f (> np mine))))))
                 (if (not need)
                   (pair #f 0)
                   (let ((autos
