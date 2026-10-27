@@ -17,25 +17,9 @@
 (import mk/expand mk-cwd mk-cwd! mk-find mk-path mk-var-set!)
 (import mk/parse mk-parse)
 (import mk/prims
-  byte-at byte-len file-exists? file-read-all file-write-all filter
+  byte-at byte-len file-exists? file-read-all file-write-all
   reverse string-append string-concat string=? substring sys-exit)
 (import mk/run mk-build mk-default-goal mk-dry mk-dry! mk-quiet mk-quiet!)
-(def %mk-cli-engine-flag?
-  (fn (_ s)
-    (match
-      ((string=? s "--quiet") #t)
-      ((string=? s "--batch") #t)
-      ((string=? s "--no-color") #t)
-      (#t (string=? s "--verbose")))))
-
-(def mk-argv
-  (fn (_ raw)
-    (def ops
-      (filter (fn (_ a) (not (%mk-cli-engine-flag? a)))
-        (if (pair? raw) (rest raw) ())))
-    (if (if (pair? ops) (string=? (first ops) "--") #f)
-      (rest ops)
-      ops)))
 
 ; The options, declared once: what the parse accepts, what --help prints and
 ; what a refusal prints, laid out as busybox lays its help text out.
@@ -177,10 +161,11 @@
                     (if (first r) #t any-built?)))))))
         (run goals #f)))))
 
-; Run the command line and DO NOT RETURN.
+; Run the operands, (Sys args 'program) past the engine's path, and DO NOT
+; RETURN.
 (def mk-main
-  (fn (_ raw-args)
-    (sys-exit (mk-run (mk-argv raw-args)))))
+  (fn (_ operands)
+    (sys-exit (mk-run operands))))
 
 (provide mk/cli
-  mk-argv mk-main mk-parse-cli mk-run)
+  mk-main mk-parse-cli mk-run)

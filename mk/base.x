@@ -7,7 +7,7 @@
 ; @license MIT No Attribution (MIT-0)
 
 (module mk/base)
-(import mk/cli mk-argv mk-main mk-parse-cli mk-run)
+(import mk/cli mk-main mk-parse-cli mk-run)
 (import mk/parse mk-parse)
 (import mk/prims)
 
