@@ -74,6 +74,7 @@
 (def proc-run (fn (_ argv) (Proc run! argv)))
 (def proc-capture (fn (_ argv) (Proc capture argv)))
 (def sys-exit (fn (_ n) (Sys exit n)))
+(def sys-environ (fn (_) (Sys environ)))        ; ("NAME=VALUE" ...)
 
 ; Expansion, words, lines and the top-level splits are cut by the platform's
 ; lexer (x/reader/lexer): tokenizer bases made from data rules, their
@@ -97,4 +98,5 @@
   integer->char length lexer-escape lexer-make lexer-nested lexer-read
   lexer-run lexer-skip lexer-table lexer-word list->string map
   proc-capture proc-run regex-compile regex-match reverse set-first!
-  string-append string-concat string-length string=? substring sys-exit)
+  string-append string-concat string-length string=? substring sys-environ
+  sys-exit)

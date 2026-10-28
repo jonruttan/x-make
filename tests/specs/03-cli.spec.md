@@ -14,12 +14,15 @@ stderr, and 2.  Options may come anywhere among the operands.
 ```
 ---
 ```output
-Usage: make [-ns] [-C DIR] [-f FILE] [VAR=VALUE]... [TARGET]...
+Usage: make [-eikns] [-C DIR] [-f FILE] [VAR=VALUE]... [TARGET]...
 
 Bring TARGETs up to date, as a makefile describes them
 
 	-C DIR	Change to DIR before reading the makefile
 	-f FILE	Read FILE as the makefile
+	-e	Let the environment override the makefile's variables
+	-i	Ignore a failing command, as a - prefix does
+	-k	Keep going past a target that failed
 	-n	Print the commands, run none
 	-s	Run commands without printing them
 0
@@ -48,10 +51,10 @@ Bring TARGETs up to date, as a makefile describes them
 ### options anywhere among the operands; VAR=value apart from the targets; the last -C wins
 
 ```make
-(display (mk-parse-cli (list "a" "-n" "X=1" "-C" "/tmp" "b" "-s" "-C/var" "-fmk")))
+(display (mk-parse-cli (list "a" "-n" "X=1" "-C" "/tmp" "b" "-s" "-C/var" "-fmk" "-eik")))
 ```
 ---
-    ((/var mk #t #t) (X=1) (a b))
+    ((/var mk #t #t #t #t #t) (X=1) (a b))
 
 ### -w, the directory-printing option GNU make and BSD make share, passes and changes nothing
 
@@ -59,4 +62,4 @@ Bring TARGETs up to date, as a makefile describes them
 (display (mk-parse-cli (list "-w" "-C" "/tmp" "all")))
 ```
 ---
-    ((/tmp () #f #f) () (all))
+    ((/tmp () #f #f #f #f #f) () (all))

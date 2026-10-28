@@ -13,23 +13,27 @@ Makefile moves, not this make.  The scope today is the measured one,
 what x-lang's own Makefiles use (see `docs/bootstrap-closure.md` for the
 measurement method), and some of that is GNU's alone.
 Working: rules with prerequisites and tab recipes; `=`, `:=`, `?=`,
-`+=`; `$(VAR)`, `$X`, `$$`, computed names; the functions `shell`
-`wildcard` `findstring` `if` `subst` `patsubst` `basename` `dir`
-`notdir` `strip`; `ifeq`/`ifneq`/`ifdef`/`ifndef`/`else`/`endif`;
-`include`/`-include`; pattern rules (`%.o: %.c`) with `$@ $< $^ $*`;
-`.PHONY`; a `FORCE:` prerequisite; `CC` defaulting to `cc`;
-backslash-newline in POSIX's two readings (one space outside a recipe,
-kept inside one); mtime-driven rebuilds (whole-second granularity); `@`
-and `-` recipe prefixes; `-C`, `-f`, `-n`, `-s`, command-line
-`VAR=value` overrides (which lock); statuses 0/2.  `-w` is taken and
-does nothing: this make never prints a directory.  There is NO chdir
-anywhere: `-C` prefixes paths and runs recipes under `cd DIR &&`.
+`+=`, `!=`; `$(VAR)`, `$X`, `$$`, computed names, the suffix
+substitution `$(VAR:.c=.o)`; the functions `shell` `wildcard`
+`findstring` `if` `subst` `patsubst` `basename` `dir` `notdir` `strip`;
+`ifeq`/`ifneq`/`ifdef`/`ifndef`/`else`/`endif`; `include`/`-include`;
+suffix rules (`.c.o:`, `.c:`, over `.SUFFIXES`) and pattern rules
+(`%.o: %.c`), an explicit rule with no recipe taking an implicit one's,
+with `$@ $< $^ $* $?`; `.PHONY`, `.SILENT`; a `FORCE:` prerequisite;
+`CC` defaulting to `cc`; the environment as defaults the makefile
+overrides; backslash-newline in POSIX's two readings (one space outside
+a recipe, kept inside one); mtime-driven rebuilds (whole-second
+granularity); `@` and `-` recipe prefixes; `-C`, `-f`, `-n`, `-s`,
+`-e`, `-i`, `-k`, command-line `VAR=value` overrides (which lock);
+statuses 0/2.  `-w` is taken and does nothing: this make never prints a
+directory.  There is NO chdir anywhere: `-C` prefixes paths and runs
+recipes under `cd DIR &&`.
 
-Not built, loudly absent rather than wrong: suffix rules and
-`$(VAR:.c=.o)`, `!=`, `$?`, `VPATH`, parallel `-j`, double-colon rules,
-the other default variables (`CXX`, `AR`, `RM`...); and GNU's alone,
-not coming: `else ifeq`, static pattern rules, `$(sort)`,
-`$(MAKEFILE_LIST)`, `define`, `export`, the `--long` options.
+Not built, loudly absent rather than wrong: `VPATH`, parallel `-j`,
+double-colon rules, `.IGNORE`, the other default variables (`CXX`,
+`AR`, `RM`...); and GNU's alone, not coming: `else ifeq`, static
+pattern rules, `$(sort)`, `$(MAKEFILE_LIST)`, `define`, `export`, the
+`--long` options.
 
 Paired with x-lang v0.39.0 (`lang.xon` is the checkable row).
 
@@ -37,7 +41,7 @@ Paired with x-lang v0.39.0 (`lang.xon` is the checkable row).
 
     make install        # into the x on PATH (yes, with the old make)
 
-    x -l make -- [-C dir] [-f makefile] [-ns] [VAR=value]... [target]...
+    x -l make -- [-C dir] [-f makefile] [-eikns] [VAR=value]... [target]...
 
     x -l make -- -C myproj            # default goal
     x -l make -- -C myproj -n all     # dry run
