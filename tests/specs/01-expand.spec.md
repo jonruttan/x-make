@@ -28,6 +28,14 @@ The expansion engine, pure: a vars box, text in, text out.
 ---
     cost $5
 
+### the substitution reference, both spellings: each word's suffix replaced; an empty suffix appends
+
+```make
+(do (def v (list ())) (mk-var-set! v "SRCS" (lit rec) "a.c b.c c.h") (display (mk-expand "$(SRCS:.c=.o) ${SRCS:.h=.hh} $(SRCS:=.x)" v ())))
+```
+---
+    a.o b.o c.h a.c b.c c.hh a.c.x b.c.x c.h.x
+
 ### the automatics overlay wins
 
 ```make

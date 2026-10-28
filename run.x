@@ -10,7 +10,7 @@
 ; @license MIT No Attribution (MIT-0)
 ;
 ; Usage:
-;   x -l make -- [-C dir] [-f makefile] [-ns] [VAR=value]... [target]...
+;   x -l make -- [-C dir] [-f makefile] [-eikns] [VAR=value]... [target]...
 
 (import mk/base make-repl-print make-version)
 (import mk/cli mk-main)
