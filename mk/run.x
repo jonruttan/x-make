@@ -12,16 +12,19 @@
 ; here).  .PHONY targets always run.  A target with no explicit recipe
 ; takes an implicit rule's: a pattern rule (%.o: %.c) or a suffix rule
 ; (.c.o:, over .SUFFIXES), the implied source joining its prerequisites.
-; Recipes run one line at a time through /bin/sh -c, under `cd PREFIX
-; &&` when -C gave one; @ silences the echo (.SILENT and -s silence
-; every one), - forgives the status (-i forgives every one).  Automatic
-; variables: $@ $< $^ $* $?.
+; Recipes run one line at a time through `$(SHELL) -c` -- /bin/sh unless
+; the makefile or the command line names another; the environment's
+; SHELL is never read, as GNU make and BSD make leave it -- under `cd
+; PREFIX &&` when -C gave one; @ silences the echo (.SILENT and -s
+; silence every one), - forgives the status (-i forgives every one).
+; Automatic variables: $@ $< $^ $* $?.
 
 (module mk/run)
-(import mk/expand mk-cwd mk-expand mk-find mk-join mk-path mk-subst)
+(import mk/expand
+  mk-cwd mk-expand mk-find mk-join mk-path mk-subst mk-trim)
 (import mk/prims
-  append byte-at byte-len file-exists? file-stat-mtime filter map
-  proc-run string-append string=? substring)
+  append byte-at byte-len file-exists? file-stat-mtime filter
+  heap-collect map proc-run string-append string=? substring)
 
 ; the switches, set by the command line and read by every module
 (def %mk-quiet #f)
@@ -165,9 +168,16 @@
           (map (fn (_ p) (mk-subst "%" (first pm) p)) (first (rest (rest pm))))
           (first (rest (rest (rest pm)))))))))
 
-; run one recipe line; answers the status
+; the shell the recipes run under: the SHELL variable, /bin/sh when it
+; is empty
+(def %mk-shell
+  (fn (_ vars)
+    (let ((s (mk-trim (mk-expand "$(SHELL)" vars ()))))
+      (if (= (byte-len s) 0) "/bin/sh" s))))
+
+; run one recipe line under SHELL; answers the status
 (def %mk-run-line
-  (fn (_ line quiet)
+  (fn (_ line shell quiet)
     (def silent (if (> (byte-len line) 0) (= (byte-at line 0) 64) #f))
     (def l1 (if silent (substring line 1 (byte-len line)) line))
     (def soft (if (> (byte-len l1) 0) (= (byte-at l1 0) 45) #f))
@@ -179,7 +189,7 @@
       (let ((full (if (= (byte-len (mk-cwd)) 0) l2
                     (string-append "cd " (string-append (mk-cwd)
                       (string-append " && " l2))))))
-        (def st (proc-run (list "/bin/sh" "-c" full)))
+        (def st (proc-run (list shell "-c" full)))
         (if (if (if soft #t (mk-ignore)) (> st 0) #f)
           (do (display
                 (string-append "make: [ignored] recipe failed: "
@@ -188,10 +198,11 @@
           st)))))
 
 (def %mk-run-recipes
-  (fn (self lines vars autos quiet)
+  (fn (self lines vars autos shell quiet)
     (if (null? lines) 0
-      (let ((st (%mk-run-line (mk-expand (first lines) vars autos) quiet)))
-        (if (> st 0) st (self (rest lines) vars autos quiet))))))
+      (let ((st (%mk-run-line (mk-expand (first lines) vars autos)
+                  shell quiet)))
+        (if (> st 0) st (self (rest lines) vars autos shell quiet))))))
 
 ; build TARGET; answers (built? . status).  VISITING guards cycles.
 (def mk-build ())
@@ -248,15 +259,21 @@
             (%mk-find-implicit rules target)
             ()))
         (def rule (%mk-rule-of explicit implicit))
-        (match
-          ((pair? rule) (%mk-build-by target rule vars rules phony visiting))
-          ((file-exists? (mk-path target)) (pair #f 0))
-          (#t
-            (pair #f
-              (do (display
-                    (string-append "make: no rule to make target "
-                      (string-append target "\n")))
-                  2))))))))
+        (def r
+          (match
+            ((pair? rule) (%mk-build-by target rule vars rules phony visiting))
+            ((file-exists? (mk-path target)) (pair #f 0))
+            (#t
+              (pair #f
+                (do (display
+                      (string-append "make: no rule to make target "
+                        (string-append target "\n")))
+                    2)))))
+        ; what looking the target up and expanding its lines made is dead
+        ; now, and the engine sweeps at no time of its own: a sweep a
+        ; visit, so the walk's footprint is one visit's, not the tree's
+        (heap-collect)
+        r))))
 
 ; build TARGET by RULE, (stem prereqs recipes), its prerequisites first
 (def %mk-build-by
@@ -293,7 +310,7 @@
                     (pair "?" (mk-join newer " ")))))
             (def st
               (%mk-run-recipes (first (rest (rest rule))) vars autos
-                (%mk-silent? target)))
+                (%mk-shell vars) (%mk-silent? target)))
             (if (> st 0)
               (do (display
                     (string-append "make: recipe for "

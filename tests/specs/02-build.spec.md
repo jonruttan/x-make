@@ -13,6 +13,14 @@ status as the value -- a case's last output line is the status.
 ---
     made
 
+### a shell that names itself, and a SHELL in the environment no make reads (set before any run, as the environment is read once)
+
+```make
+(do (Sys setenv "SHELL" "/nonexistent/sh") (file-write-all "/tmp/x-make-spec/namesh" "#!/bin/sh\necho \"namesh: $2\"\n") (proc-run (list "/bin/sh" "-c" "chmod +x /tmp/x-make-spec/namesh")) (display "ready"))
+```
+---
+    ready
+
 ## the walk
 
 ### the default goal builds its prerequisite then runs
@@ -267,6 +275,31 @@ env
 cli
 0
 ```
+
+### recipes run under the makefile's SHELL, the command line's over it; the environment's is never read
+
+```make
+(do (file-write-all "/tmp/x-make-spec/Makefile.shell" "SHELL = /tmp/x-make-spec/namesh\nshow:\n\t@echo hi\n") (file-write-all "/tmp/x-make-spec/Makefile.noshell" "show:\n\t@echo $(SHELL)\n") (display (mk-run (list "-f" "/tmp/x-make-spec/Makefile.shell" "show"))) (newline) (display (mk-run (list "-f" "/tmp/x-make-spec/Makefile.noshell" "SHELL=/tmp/x-make-spec/namesh" "show"))) (newline) (display (mk-run (list "-f" "/tmp/x-make-spec/Makefile.noshell" "show"))))
+```
+---
+```output
+namesh: echo hi
+0
+namesh: echo /tmp/x-make-spec/namesh
+0
+/bin/sh
+0
+```
+
+## the walk's footprint
+
+### a sweep a visit: forty targets remade leave the heap where one did
+
+```make
+(do (proc-run (list "/bin/sh" "-c" "{ printf 'all:'; i=0; while [ $i -lt 40 ]; do printf ' t%s' $i; i=$((i+1)); done; printf '\\n'; i=0; while [ $i -lt 40 ]; do printf 't%s:\\n\\t@:\\n' $i; i=$((i+1)); done; } > /tmp/x-make-spec/Makefile.many")) (Heap collect) (let ((c0 (Heap count))) (mk-run (list "-f" "/tmp/x-make-spec/Makefile.many" "t0")) (let ((c1 (Heap count))) (mk-run (list "-f" "/tmp/x-make-spec/Makefile.many" "all")) (let ((c41 (Heap count))) (display (if (< (- c41 c1) (- c1 c0)) "bounded" (list c0 c1 c41)))))))
+```
+---
+    bounded
 
 ### cleanup
 

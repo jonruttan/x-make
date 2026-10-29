@@ -20,10 +20,13 @@ substitution `$(VAR:.c=.o)`; the functions `shell` `wildcard`
 suffix rules (`.c.o:`, `.c:`, over `.SUFFIXES`) and pattern rules
 (`%.o: %.c`), an explicit rule with no recipe taking an implicit one's,
 with `$@ $< $^ $* $?`; `.PHONY`, `.SILENT`; a `FORCE:` prerequisite;
-`CC` defaulting to `cc`; the environment as defaults the makefile
-overrides; backslash-newline in POSIX's two readings (one space outside
-a recipe, kept inside one); mtime-driven rebuilds (whole-second
-granularity); `@` and `-` recipe prefixes; `-C`, `-f`, `-n`, `-s`,
+`CC` defaulting to `cc`; `SHELL` naming the shell recipes run under
+(`/bin/sh` unless the makefile or the command line says otherwise; the
+environment's `SHELL` is never read, as GNU make and BSD make leave it);
+the environment as defaults the makefile overrides; backslash-newline
+in POSIX's two readings (one space outside a recipe, kept inside one);
+mtime-driven rebuilds (whole-second granularity); `@` and `-` recipe
+prefixes; `-C`, `-f`, `-n`, `-s`,
 `-e`, `-i`, `-k`, command-line `VAR=value` overrides (which lock);
 statuses 0/2.  `-w` is taken and does nothing: this make never prints a
 directory.  There is NO chdir anywhere: `-C` prefixes paths and runs

@@ -75,6 +75,8 @@
 (def proc-capture (fn (_ argv) (Proc capture argv)))
 (def sys-exit (fn (_ n) (Sys exit n)))
 (def sys-environ (fn (_) (Sys environ)))        ; ("NAME=VALUE" ...)
+; a sweep of what is not live; the engine collects at no other time
+(def heap-collect (fn (_) (Heap collect)))
 
 ; Expansion, words, lines and the top-level splits are cut by the platform's
 ; lexer (x/reader/lexer): tokenizer bases made from data rules, their
@@ -95,8 +97,8 @@
 (provide mk/prims
   append byte-at byte-len char->integer file-exists? file-list-dir
   file-read-all file-stat-mtime file-unlink file-write-all filter
-  integer->char length lexer-escape lexer-make lexer-nested lexer-read
-  lexer-run lexer-skip lexer-table lexer-word list->string map
+  heap-collect integer->char length lexer-escape lexer-make lexer-nested
+  lexer-read lexer-run lexer-skip lexer-table lexer-word list->string map
   proc-capture proc-run regex-compile regex-match reverse set-first!
   string-append string-concat string-length string=? substring sys-environ
   sys-exit)

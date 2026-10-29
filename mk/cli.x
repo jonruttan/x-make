@@ -123,9 +123,15 @@
 
 ; the process's environment as ((NAME . VALUE) ...), read and split once:
 ; the walk over environ costs tens of megabytes a call on an engine
-; without automatic collection, and so does a split of every entry.  MAKE
-; stays this make's own.
+; without automatic collection, and so does a split of every entry.
 (def %mk-env-cell (list #f ()))                 ; (read? pairs)
+
+; what the environment never sets: MAKE is this make's own, and SHELL is
+; the makefile's or the command line's, the reading GNU make and BSD make
+; share (POSIX leaves the shell to the implementation and keeps the
+; environment's SHELL out of it)
+(def %mk-env-own?
+  (fn (_ name) (if (string=? name "MAKE") #t (string=? name "SHELL"))))
 (def %mk-environ
   (fn (_)
     (if (first %mk-env-cell) ()
@@ -139,7 +145,7 @@
       (let ((e (first es)))
         (def at (mk-top-at e 61))
         (self (rest es)
-          (if (if (> at 0) (not (string=? (substring e 0 at) "MAKE")) #f)
+          (if (if (> at 0) (not (%mk-env-own? (substring e 0 at))) #f)
             (pair (pair (substring e 0 at) (substring e (+ at 1) (byte-len e)))
               acc)
             acc))))))
@@ -176,11 +182,13 @@
       (do (file-write-all "/dev/stderr" "make: no makefile found\n")
           2)
       (let ((vars (list ())))
-        ; MAKE for recursion, CC as GNU make and BSD make default it (a
-        ; CC?= in the makefile leaves it); command-line overrides LOCK
+        ; MAKE for recursion, CC and SHELL as GNU make and BSD make
+        ; default them (a CC?= in the makefile leaves it; a SHELL= names
+        ; the shell the recipes run under); command-line overrides LOCK
         ; theirs
         (mk-var-set! vars "MAKE" (lit rec) "x -l make --")
         (mk-var-set! vars "CC" (lit rec) "cc")
+        (mk-var-set! vars "SHELL" (lit rec) "/bin/sh")
         (def lock!
           (fn (self os)
             (if (null? os) ()
