@@ -38,7 +38,7 @@ double-colon rules, `.IGNORE`, the other default variables (`CXX`,
 pattern rules, `$(sort)`, `$(MAKEFILE_LIST)`, `define`, `export`, the
 `--long` options.
 
-Paired with x-lang v0.39.0 (`lang.xon` is the checkable row).
+Paired with x-lang v0.44.0 (`lang.xon` is the checkable row).
 
 ## Try it
 
