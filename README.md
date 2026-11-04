@@ -68,6 +68,7 @@ engine the suite drives directly.
     mk/parse.x        the line interpreter: conditionals, assignments, rules
     mk/run.x          the DAG walk, mtimes, recipes
     mk/cli.x          options, overrides, mk-main (the exit)
+    mk/syntax.x       the make highlighting grammar, x/tool/syntax's (vi :set sy)
     tests/            markdown specs + the platform's runner, vendored nowhere
 
 <p align="center"><img src="docs/bitwise-mark.svg" alt="Bitwise" width="96"></p>
