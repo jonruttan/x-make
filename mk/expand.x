@@ -13,14 +13,14 @@
 ; A reference NAME:SUF=REP is the suffix substitution every make reads.
 ;
 ; Functions carried: shell wildcard findstring if subst patsubst
-; basename dir notdir strip -- the set the measured Makefiles use, plus
-; the trivial siblings.  $(shell) and $(wildcard) honour mk-cwd, the
-; -C prefix (there is no chdir anywhere in this bundle: commands run
+; basename dir notdir strip sort -- the set the measured Makefiles use,
+; plus the trivial siblings.  $(shell) and $(wildcard) honour mk-cwd,
+; the -C prefix (there is no chdir anywhere in this bundle: commands run
 ; under `cd PREFIX &&` and paths join it).
 
 (module mk/expand)
 (import mk/prims
-  append byte-at byte-len file-exists? file-list-dir filter
+  append byte-at byte-len file-dir? file-exists? file-list-dir filter
   integer->char lexer-escape lexer-make lexer-nested lexer-read
   lexer-run lexer-skip lexer-table lexer-word list->string map
   proc-capture regex-compile regex-match reverse set-first!
@@ -209,6 +209,14 @@
         (if (null? l) acc (self (rest l) (ins (first l) acc)))))
     (go ws ())))
 
+; a sorted list with each word once
+(def %mk-uniq
+  (fn (self ws)
+    (if (null? ws) ()
+      (if (if (pair? (rest ws)) (string=? (first ws) (first (rest ws))) #f)
+        (self (rest ws))
+        (pair (first ws) (self (rest ws)))))))
+
 ; substring search: position or -1
 (def %mk-find-go
   (fn (self s t ls lt i)
@@ -270,6 +278,13 @@
             (pair (first l) (self (rest l)))))))
     (go es)))
 
+; NAME's value extended by TEXT, as a simple variable (a lock entry stands)
+(def mk-var-append!
+  (fn (_ vars name text)
+    (let ((e (mk-var-entry vars name)))
+      (mk-var-set! vars name (lit simple)
+        (if (null? e) text (string-append (rest (rest e)) text))))))
+
 ; --- glob --------------------------------------------------------------------
 
 ; glob pattern to an anchored regex: * any run, ? one, [..] verbatim,
@@ -304,29 +319,80 @@
               (#t (self (+ i 1) (pair (%mk-b->s b) acc))))))))
     (go 0 ())))
 
+; a component with a glob character: * ? [
+(def %mk-glob-chars?
+  (fn (_ s)
+    (def go
+      (fn (self i)
+        (if (>= i (byte-len s)) #f
+          (let ((b (byte-at s i)))
+            (if (match ((= b 42) #t) ((= b 63) #t) (#t (= b 91)))
+              #t
+              (self (+ i 1)))))))
+    (go 0)))
+
+; S split at every byte B, empty pieces kept
+(def %mk-split-byte
+  (fn (_ s b)
+    (def go
+      (fn (self i start acc)
+        (match
+          ((>= i (byte-len s)) (reverse (pair (substring s start i) acc)))
+          ((= (byte-at s i) b)
+            (self (+ i 1) (+ i 1) (pair (substring s start i) acc)))
+          (#t (self (+ i 1) start acc)))))
+    (go 0 0 ())))
+
+; NAME under DIR; DIR is nil at the start of a walk
+(def %mk-join-comp
+  (fn (_ dir name)
+    (if (null? dir) name (string-append dir (string-append "/" name)))))
+
+; the directory a walk lists for DIR: the start is ., an empty piece (an
+; absolute pattern) the root
+(def %mk-scan-dir
+  (fn (_ dir)
+    (match
+      ((null? dir) ".")
+      ((= (byte-len dir) 0) "/")
+      (#t dir))))
+
+; the entries of DIR that match the glob COMP, each under DIR, sorted;
+; none where DIR is no directory
+(def %mk-glob-names
+  (fn (_ dir comp)
+    (def scan (mk-path (%mk-scan-dir dir)))
+    (if (not (file-dir? scan)) ()
+      (let ((rx (%mk-glob-rx comp)))
+        (map (fn (_ n) (%mk-join-comp dir n))
+          (%mk-sort
+            (filter (fn (_ n)
+                      (if (string=? n ".") #f
+                        (if (string=? n "..") #f (regex-match n rx))))
+              (file-list-dir scan))))))))
+
+(def %mk-concat-map
+  (fn (_ f l)
+    (def go
+      (fn (self es)
+        (if (null? es) () (append (f (first es)) (self (rest es))))))
+    (go l)))
+
+; one pattern's matches: a walk over its components, a glob component
+; listing every directory reached so far (** reads as *, one directory,
+; as glob(3) and GNU's wildcard read it), a plain one joining; what the
+; walk names and exists
 (def %mk-glob-one
   (fn (_ pat)
-    (def slash
-      (let ((go (fn (self i last)
-                  (if (>= i (byte-len pat)) last
-                    (self (+ i 1)
-                      (if (= (byte-at pat i) 47) i last))))))
-        (go 0 (- 0 1))))
-    (def dirpart (if (< slash 0) "" (substring pat 0 slash)))
-    (def basepat (if (< slash 0) pat
-                   (substring pat (+ slash 1) (byte-len pat))))
-    (def scan-dir (mk-path (if (= (byte-len dirpart) 0) "." dirpart)))
-    (if (not (file-exists? scan-dir)) ()
-      (let ((rx (%mk-glob-rx basepat)))
-        (def names
-          (filter (fn (_ n)
-                    (if (string=? n ".") #f
-                      (if (string=? n "..") #f (regex-match n rx))))
-            (file-list-dir scan-dir)))
-        (map (fn (_ n)
-               (if (= (byte-len dirpart) 0) n
-                 (string-append dirpart (string-append "/" n))))
-          (%mk-sort names))))))
+    (def go
+      (fn (self comps dirs)
+        (if (null? comps) dirs
+          (self (rest comps)
+            (if (%mk-glob-chars? (first comps))
+              (%mk-concat-map (fn (_ d) (%mk-glob-names d (first comps))) dirs)
+              (map (fn (_ d) (%mk-join-comp d (first comps))) dirs))))))
+    (filter (fn (_ p) (file-exists? (mk-path p)))
+      (go (%mk-split-byte pat 47) (list ())))))
 
 ; --- the shell ---------------------------------------------------------------
 
@@ -436,6 +502,12 @@
           " "))
       ((%mk-fn-name? inner "strip")
         (mk-join (mk-words (mk-expand (first (call "strip")) vars autos)) " "))
+      ((%mk-fn-name? inner "sort")
+        ; GNU's: the words in order, each once
+        (mk-join
+          (%mk-uniq
+            (%mk-sort (mk-words (mk-expand (first (call "sort")) vars autos))))
+          " "))
       (#t
       ; a variable reference; a computed name expands first
       (let ((name (if (< (mk-find inner "$") 0) inner
@@ -506,10 +578,13 @@
           (self (rest ws) (pair (%mk-pat-one (first ws) pat repl pc) acc)))))
     (go (mk-words text) ())))
 
-(def %mk-pat-one
-  (fn (_ w pat repl pc)
+; W against the pattern PAT: the stem its % stands for, "" where PAT has
+; no % and is W whole, nil where PAT does not match
+(def mk-pat-stem
+  (fn (_ w pat)
+    (def pc (mk-find pat "%"))
     (if (< pc 0)
-      (if (string=? w pat) repl w)
+      (if (string=? w pat) "" ())
       (let ((pre (substring pat 0 pc)))
         (def suf (substring pat (+ pc 1) (byte-len pat)))
         (def lw (byte-len w))
@@ -520,9 +595,16 @@
                 (string=? (substring w (- lw ls) lw) suf)
                 #f)
               #f)
-          (let ((stem (substring w lp (- lw ls))))
-            (mk-subst "%" stem repl))
-          w)))))
+          (substring w lp (- lw ls))
+          ())))))
+
+(def %mk-pat-one
+  (fn (_ w pat repl pc)
+    (let ((stem (mk-pat-stem w pat)))
+      (match
+        ((null? stem) w)
+        ((< pc 0) repl)
+        (#t (mk-subst "%" stem repl))))))
 
 ; the inner text of a reference token: $( or ${ off the front, and the
 ; closer off the end where one closed it -- a reference left open at the
@@ -562,5 +644,5 @@
 
 (provide mk/expand
   mk-args mk-cwd mk-expand mk-find mk-join mk-lx-lines-cell mk-lx-split
-  mk-path mk-pieces mk-shell-capture mk-subst mk-top-at mk-trim
-  mk-var-entry mk-var-set! mk-words mk-ws? mk-cwd!)
+  mk-pat-stem mk-path mk-pieces mk-shell-capture mk-subst mk-top-at
+  mk-trim mk-var-append! mk-var-entry mk-var-set! mk-words mk-ws? mk-cwd!)

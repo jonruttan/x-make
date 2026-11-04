@@ -39,8 +39,10 @@
       (Opts flag "-n" "Print the commands, run none")
       (Opts flag "-s" "Run commands without printing them")
       ; GNU make's and BSD make's -w prints the directory entered and
-      ; left; this make never prints one, so -w is taken and does nothing
-      (Opts hidden (Opts flag "-w" "Nothing")))))
+      ; left, GNU's long spellings turn that on and off; this make never
+      ; prints one, so all three are taken and do nothing
+      (Opts hidden (Opts flag "-w" "--print-directory" "Nothing"))
+      (Opts hidden (Opts flag "--no-print-directory" "Nothing")))))
 
 ; a VAR=value operand: NAME then =
 (def %mk-assign-op?
@@ -199,6 +201,9 @@
                 (self (rest os))))))
         (lock! ovr)
         (%mk-import-env! vars (if (%mk-nth opts 4) (lit lock) (lit rec)))
+        ; the makefile's name opens MAKEFILE_LIST, GNU's; include appends
+        (mk-var-set! vars "MAKEFILE_LIST" (lit simple)
+          (string-append " " mf-name))
         (def parsed (mk-parse (file-read-all (mk-path mf-name)) vars))
         (def rules (first (rest parsed)))
         (def phony (first (rest (rest parsed))))

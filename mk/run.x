@@ -236,6 +236,13 @@
               (if (null? m) #t (> m mine)))))
         prereqs))))
 
+; a static pattern rule's instance carries its stem, GNU's; any other
+; explicit rule has none
+(def %mk-explicit-stem
+  (fn (_ rule)
+    (let ((tail (rest (rest (rest rule)))))
+      (if (null? tail) "" (first tail)))))
+
 ; the rule to build by, (stem prereqs recipes): the explicit rule's, an
 ; implicit rule's, or both when the explicit rule has no recipe (the
 ; implied source joins its prerequisites, as GNU and BSD read it)
@@ -244,7 +251,8 @@
     (match
       ((null? explicit) implicit)
       ((null? implicit)
-        (list "" (first (rest explicit)) (first (rest (rest explicit)))))
+        (list (%mk-explicit-stem explicit) (first (rest explicit))
+          (first (rest (rest explicit)))))
       (#t
         (list (first implicit)
           (append (first (rest implicit)) (first (rest explicit)))
