@@ -24,7 +24,9 @@
   mk-cwd mk-expand mk-find mk-join mk-path mk-subst mk-trim)
 (import mk/prims
   append byte-at byte-len file-exists? file-stat-mtime filter
-  heap-collect map proc-run string-append string=? substring)
+  map proc-run string-append string=? substring)
+; a sweep of what is not live; the engine collects at no other time
+(import x/core/doors heap-collect)
 
 ; the switches, set by the command line and read by every module
 (def %mk-quiet #f)
