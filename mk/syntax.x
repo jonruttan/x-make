@@ -80,15 +80,13 @@
 ; A line that starts with neither a blank nor a tab, below a line that does
 ; not end in a backslash, is taken to start outside any expansion, so spans
 ; need not read the makefile from its top.
-(def %mk-syntax-bref (prim-ref (lit str) (lit byte-ref)))
-(def %mk-syntax-cint (prim-ref (lit char) (lit ->int)))
-(def %mk-syntax-blen (prim-ref (lit str) (lit byte-len)))
-(def %mk-syntax-byte (fn (_ s i) (%mk-syntax-cint (%mk-syntax-bref s i))))
+(import x/core/doors str-byte-ref char->int str-byte-len)
+(def %mk-syntax-byte (fn (_ s i) (char->int (str-byte-ref s i))))
 
 (def %mk-syntax-sync
   (fn (_ s ls)
     (match
-      ((>= ls (%mk-syntax-blen s)) #f)
+      ((>= ls (str-byte-len s)) #f)
       ((List includes? (%mk-syntax-byte s ls) (list 9 10 32)) #f)
       ((< ls 2) #t)
       (#t (not (= (%mk-syntax-byte s (- ls 2)) 92))))))
