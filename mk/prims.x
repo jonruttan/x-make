@@ -16,10 +16,11 @@
 (import x/sys/proc)
 (import x/sys/opts)
 
-(def char->integer (prim-ref (lit char) (lit ->int)))
-(def integer->char (prim-ref (lit int) (lit ->char)))
-(def byte-at (prim-ref (lit str) (lit byte-ref)))
-(def byte-len (prim-ref (lit str) (lit byte-len)))
+(import x/core/doors char->int int->char str-byte-ref str-byte-len)
+(def char->integer char->int)
+(def integer->char int->char)
+(def byte-at str-byte-ref)
+(def byte-len str-byte-len)
 
 (def string-length (fn (_ s) (Str8 length s)))
 (def substring (fn (_ s a b) (Str8 sub a (- b a) s)))
