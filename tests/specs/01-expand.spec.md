@@ -94,6 +94,14 @@ The expansion engine, pure: a vars box, text in, text out.
 ---
     [a b]
 
+### sort, GNU's: the words in order, each once
+
+```make
+(do (def v (list ())) (display (mk-expand "$(sort c a b a c)" v ())))
+```
+---
+    a b c
+
 ### shell
 
 ```make

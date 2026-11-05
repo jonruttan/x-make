@@ -63,3 +63,11 @@ Bring TARGETs up to date, as a makefile describes them
 ```
 ---
     ((/tmp () #f #f #f #f #f) () (all))
+
+### GNU's --print-directory and --no-print-directory pass too, and change nothing
+
+```make
+(display (mk-parse-cli (list "--no-print-directory" "--print-directory" "-C" "/tmp" "all")))
+```
+---
+    ((/tmp () #f #f #f #f #f) () (all))

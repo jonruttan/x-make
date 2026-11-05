@@ -7,11 +7,12 @@ core set (awk, grep, sed, make).  Deliberately SELF-CONTAINED: make is
 the bootstrap's root tool, so this bundle requires no other lang.
 
 The aim is the middle ground between GNU make, BSD make and the others:
-the readings they share, POSIX's where it has one.  A Makefile here
-should not need a reading only one of them has; when one does, the
-Makefile moves, not this make.  The scope today is the measured one,
-what x-lang's own Makefiles use (see `docs/bootstrap-closure.md` for the
-measurement method), and some of that is GNU's alone.
+the readings they share, POSIX's where it has one, and on top of those
+the readings one of them writes that a Makefile in the wild leans on.
+A Makefile here should not need a reading only one of them has; when
+one does, the Makefile moves, not this make.  The scope today is the
+measured one, what x-lang's own Makefiles used before they moved (see
+`docs/bootstrap-closure.md` for the measurement method).
 Working: rules with prerequisites and tab recipes; `=`, `:=`, `?=`,
 `+=`, `!=`; `$(VAR)`, `$X`, `$$`, computed names, the suffix
 substitution `$(VAR:.c=.o)`; the functions `shell` `wildcard`
@@ -32,11 +33,17 @@ statuses 0/2.  `-w` is taken and does nothing: this make never prints a
 directory.  There is NO chdir anywhere: `-C` prefixes paths and runs
 recipes under `cd DIR &&`.
 
+GNU's, read here, not written here (a Makefile in this project stays
+on the shared readings above): `else ifeq` and its three siblings on
+one line; static pattern rules (`$(OBJS): %.o: %.c`); `$(sort)`;
+`$(MAKEFILE_LIST)`; a glob in any component of a `$(wildcard)` path,
+`**` reading as `*` (one directory, as GNU's glob does);
+`--print-directory` and `--no-print-directory`, taken as `-w` is.
+
 Not built, loudly absent rather than wrong: `VPATH`, parallel `-j`,
 double-colon rules, `.IGNORE`, the other default variables (`CXX`,
-`AR`, `RM`...); and GNU's alone, not coming: `else ifeq`, static
-pattern rules, `$(sort)`, `$(MAKEFILE_LIST)`, `define`, `export`, the
-`--long` options.
+`AR`, `RM`...); and GNU's alone, not coming: `define`, `export`, the
+other `--long` options.
 
 Paired with x-lang v0.44.0 (`lang.xon` is the checkable row).
 
