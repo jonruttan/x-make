@@ -3,8 +3,8 @@
 ; ## mk/syntax.x -- the make highlighting grammar
 ;
 ; @description The grammar x/tool/syntax colours makefiles with: comments,
-;   macro expansions, the directives as keywords, the special targets as
-;   constants, and the assignment and rule operators.
+;   macro expansions, the directives as keywords, rule targets as classes,
+;   the special targets as constants, and the assignment and rule operators.
 ; @author [Jon Ruttan](jonruttan@gmail.com)
 ; @copyright 2026 Jon Ruttan
 ; @license MIT No Attribution (MIT-0)
@@ -67,6 +67,8 @@
     (Lexer escape (lit escape) 92)
     (Lexer table (lit op)
       (list "=" ":=" "::=" ":::=" "?=" "+=" "!=" ":" "::" "|" ";"))
+    (Lexer pattern (lit target)
+      (list (list %mk-syntax-word 1 ()) (list ":" 1 3) (list "=" 0 1)))
     (Lexer run (lit word) %mk-syntax-word %mk-syntax-word)
     (Lexer any (lit other))))
 
@@ -77,11 +79,30 @@
       ((List includes? text mk-syntax-special-targets) (lit constant))
       (#t ()))))
 
+(import x/core/doors str-byte-ref char->int str-byte-len int+ int-)
+(def %mk-syntax-byte (fn (_ s i) (char->int (str-byte-ref s i))))
+
+; Where the colons ending a target word start: the word's length.
+(def %mk-syntax-colon
+  (fn (self s i) (if (= (%mk-syntax-byte s i) 58) i (self s (int+ i 1)))))
+
+; A word then its colons is a target: the word a class, a special target a
+; constant, and the colons the rule's operator.  A word then := or ::= is
+; a macro's name, left plain, and the operator after it.  The token is
+; lexical, so a word and a colon in a recipe's line, a URL's scheme among
+; them, colours as a target too.
+(def %mk-syntax-target-class
+  (fn (_ text)
+    (let ((k (%mk-syntax-colon text 0)) (n (str-byte-len text)))
+      (match
+        ((= (%mk-syntax-byte text (int- n 1)) 61) (list (list k (int- n k) (lit operator))))
+        ((List includes? (Str8 sub 0 k text) mk-syntax-special-targets)
+          (list (list 0 k (lit constant)) (list k (int- n k) (lit operator))))
+        (#t (list (list 0 k (lit class)) (list k (int- n k) (lit operator))))))))
+
 ; A line that starts with neither a blank nor a tab, below a line that does
 ; not end in a backslash, is taken to start outside any expansion, so spans
 ; need not read the makefile from its top.
-(import x/core/doors str-byte-ref char->int str-byte-len)
-(def %mk-syntax-byte (fn (_ s i) (char->int (str-byte-ref s i))))
 
 (def %mk-syntax-sync
   (fn (_ s ls)
@@ -97,6 +118,7 @@
                    (pair (lit expand) (lit name))
                    (pair (lit escape) (lit escape))
                    (pair (lit op) (lit operator))
+                   (pair (lit target) %mk-syntax-target-class)
                    (pair (lit word) %mk-syntax-word-class)))))
     (g sync %mk-syntax-sync)
     g))
