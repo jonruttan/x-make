@@ -55,7 +55,20 @@ grammar takes lang.xon's suffixes, names and interpreters.
       "# build\nCC ?= cc\nOBJ = $(patsubst %.c,%.o,$(SRC))\n.PHONY: all\nall: $(OBJ) | dir\n\t$(CC) -o $@ $^ \\\n\t  && echo $$HOME\nifeq ($(OS),x)\n-include rules.mk\nendif\n"))
 ```
 ---
-    ((0 7 'comment) (11 2 'operator) (21 1 'operator) (23 26 'name) (50 6 'constant) (56 1 'operator) (65 1 'operator) (67 6 'name) (74 1 'operator) (81 5 'name) (90 2 'name) (93 2 'name) (96 2 'escape) (109 2 'name) (116 4 'keyword) (122 5 'name) (131 8 'keyword) (149 5 'keyword))
+    ((0 7 'comment) (11 2 'operator) (21 1 'operator) (23 26 'name) (50 6 'constant) (56 1 'operator) (62 3 'class) (65 1 'operator) (67 6 'name) (74 1 'operator) (81 5 'name) (90 2 'name) (93 2 'name) (96 2 'escape) (109 2 'name) (116 4 'keyword) (122 5 'name) (131 8 'keyword) (149 5 'keyword))
+
+### a target colours apart from its colons
+
+A word then one to three colons is a target, the colons the rule's
+operator; a word then := or ::= is a macro's name, left plain.  Each token
+is lexical, so of two targets only the one touching the colon colours.
+
+```make
+(do (import x/tool/syntax) (import mk/syntax)
+    ((Syntax named (lit make)) spans "a:=b\nx y.o: z\n%.o:: %.c\n"))
+```
+---
+    ((1 2 'operator) (7 3 'class) (10 1 'operator) (14 3 'class) (17 2 'operator))
 
 ### an expansion left open runs to the end
 
