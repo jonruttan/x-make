@@ -45,7 +45,7 @@ double-colon rules, `.IGNORE`, the other default variables (`CXX`,
 `AR`, `RM`...); and GNU's alone, not coming: `define`, `export`, the
 other `--long` options.
 
-Paired with x-lang v0.44.0 (`lang.xon` is the checkable row).
+Paired with x-lang v0.51.0 (`lang.xon` is the checkable row).
 
 ## Try it
 
