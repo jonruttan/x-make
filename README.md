@@ -17,7 +17,7 @@ one does, the Makefile moves, not this make.
 
 ## Status
 
-No release has been cut. Paired with x-lang v0.51.0 (`lang.xon` is the
+No release has been cut. Paired with x-lang v0.53.0 (`lang.xon` is the
 checkable row).
 
 ## What it does
