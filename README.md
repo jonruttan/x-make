@@ -86,6 +86,11 @@ It needs x-lang at the release `lang.xon` declares.
 
     make test           # the suite
     make check          # the suite against tests/contract/known-failures.txt
+    make card           # docs/card.md: its format, and every makefile run
+
+[docs/card.md](docs/card.md) is the reference page: the lines of a
+makefile, the variables, rules and functions in tables, and makefiles
+that are run, each beside what it prints.
 
 `(mk-run ARGV)` is the core, and `(%mk-expand TEXT VARS AUTOS)` is the
 expansion the suite calls directly.
