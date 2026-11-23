@@ -1,16 +1,16 @@
 ; # x-make -- a make on x-lang
 ;
-; ## mk/prims.x -- the platform layer
+; ## make/prims.x -- the platform layer
 ;
 ; @author [Jon Ruttan](jonruttan@gmail.com)
 ; @copyright 2026 Jon Ruttan
 ; @license MIT No Attribution (MIT-0)
 ;
-; Self-contained by design (see lang.xon): the byte doors, File, Proc,
+; Self-contained by design (see bundle.xon): the byte doors, File, Proc,
 ; and the regex engine for glob matching, with the arc's rules applied
 ; -- raw-allocation for read buffers, no defs at depth in anything hot.
 
-(module mk/prims)
+(module make/prims)
 (import x/type/regex)
 (import x/sys/file)
 (import x/sys/proc)
@@ -82,7 +82,7 @@
 
 ; Expansion, words, lines and the top-level splits are cut by the platform's
 ; lexer (x/reader/lexer): tokenizer bases made from data rules, their
-; analysers native code.  mk/expand.x makes each once and keeps it.  A nested
+; analysers native code.  make/expand.x makes each once and keeps it.  A nested
 ; span or a word still open at the end of the text is a token all the same.
 (import x/reader/lexer)
 (def lexer-make (fn (_ rules end) (Lexer make rules end)))
@@ -96,7 +96,7 @@
   (fn (_ tag start contexts stop) (Lexer word tag start contexts stop (lit to-end))))
 (def lexer-read (fn (_ l s) (l read-str s)))
 
-(provide mk/prims
+(provide make/prims
   append byte-at byte-len char->integer file-dir? file-exists? file-list-dir
   file-read-all file-stat-mtime file-unlink file-write-all filter
   integer->char length lexer-escape lexer-make lexer-nested

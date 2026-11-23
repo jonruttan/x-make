@@ -1,6 +1,6 @@
 ; # x-make -- a make on x-lang
 ;
-; ## mk/parse.x -- makefile text to rules and variables
+; ## make/parse.x -- makefile text to rules and variables
 ;
 ; @author [Jon Ruttan](jonruttan@gmail.com)
 ; @copyright 2026 Jon Ruttan
@@ -31,12 +31,12 @@
 ; %mk-fold-go for the two readings), any other backslash and the byte
 ; after it stand (so a doubled backslash before a newline is no
 ; continuation), and a last line nothing ended is a line when it has bytes.
-(module mk/parse)
-(import mk/expand
+(module make/parse)
+(import make/expand
   mk-args mk-expand mk-find mk-lx-lines-cell mk-pat-stem mk-path
   mk-shell-capture mk-subst mk-top-at mk-trim mk-var-append! mk-var-entry
   mk-var-set! mk-words mk-ws?)
-(import mk/prims
+(import make/prims
   append byte-at byte-len file-exists? file-read-all lexer-escape
   lexer-make lexer-read lexer-run lexer-table map reverse set-first!
   string-append string-concat string=? substring)
@@ -457,5 +457,5 @@
       (first (rest (rest (rest (rest st)))))
       (first (rest (rest (rest (rest (rest st)))))))))
 
-(provide mk/parse
+(provide make/parse
   mk-parse)

@@ -1,32 +1,32 @@
 # @weight 1
 
-## mk/syntax -- the make highlighting grammar
+## make/syntax -- the make highlighting grammar
 
-The bundle's lang.xon declares a grammar, `make`, that x/tool/syntax colours
-makefiles with. Its module, `mk/syntax`, imports only x-lang libraries and
+The bundle's bundle.xon declares a grammar, `make`, that x/tool/syntax colours
+makefiles with. Its module, `make/syntax`, imports only x-lang libraries and
 registers the grammar as it loads.
 
 The cases share one process, and a registered grammar stays registered, so
-the catalogue's case comes first: it finds the grammar through lang.xon,
+the catalogue's case comes first: it finds the grammar through bundle.xon,
 before anything has imported the module.
 
 ### the catalogue finds make by name, by suffix, by #! and by modeline
 
 The langs directory holds this bundle, linked as `make`. The row comes from
-lang.xon, its module not loaded until a file asks for the grammar, and the
-grammar takes lang.xon's suffixes, names and interpreters.
+bundle.xon, its module not loaded until a file asks for the grammar, and the
+grammar takes bundle.xon's suffixes, names and interpreters.
 
 ```make
 (do (import x/sys/posix) (import x/sys/file) (import x/tool/syntax)
-    (def root (Str8 replace "/mk/syntax.x" "" (%module-resolve-file "mk/syntax.x")))
+    (def root (Str8 replace "/lib/make/syntax.x" "" (%module-resolve-file "make/syntax.x")))
     (def tmp (File temp "/tmp/x-make-spec-langs-"))
     (File close (first tmp))
     (def d (rest tmp))
     (File unlink d)
     (File mkdir d)
     (File symlink root (Str8 append d "/make"))
-    (def was (Sys getenv "X_LANG_DIR"))
-    (Sys setenv "X_LANG_DIR" d)
+    (def was (Sys getenv "X_BUNDLE_DIR"))
+    (Sys setenv "X_BUNDLE_DIR" d)
     (Syntax forget!)
     (def row (List find (fn (_ r) (eq? (first r) (lit make))) (Syntax catalogue)))
     (def name (fn (_ path . text)
@@ -40,17 +40,17 @@ grammar takes lang.xon's suffixes, names and interpreters.
             (let ((g (Syntax named (lit make)))) (list (g files) (g names) (g interpreters)))))
     (File unlink (Str8 append d "/make"))
     (File rmdir d)
-    (Sys setenv "X_LANG_DIR" (if (null? was) "" was))
+    (Sys setenv "X_BUNDLE_DIR" (if (null? was) "" was))
     (Syntax forget!)
     seen)
 ```
 ---
-    ('mk/syntax 'make 'make 'make 'make 'make () ((".mk" ".mak") ("Makefile" "makefile" "GNUmakefile" "BSDmakefile") ("make")))
+    ('make/syntax 'make 'make 'make 'make 'make () ((".mk" ".mak") ("Makefile" "makefile" "GNUmakefile" "BSDmakefile") ("make")))
 
 ### a makefile's spans: comments, expansions, directives and operators
 
 ```make
-(do (import x/tool/syntax) (import mk/syntax)
+(do (import x/tool/syntax) (import make/syntax)
     ((Syntax named (lit make)) spans
       "# build\nCC ?= cc\nOBJ = $(patsubst %.c,%.o,$(SRC))\n.PHONY: all\nall: $(OBJ) | dir\n\t$(CC) -o $@ $^ \\\n\t  && echo $$HOME\nifeq ($(OS),x)\n-include rules.mk\nendif\n"))
 ```
@@ -64,7 +64,7 @@ operator; a word then := or ::= is a macro's name, left plain.  Each token
 is lexical, so of two targets only the one touching the colon colours.
 
 ```make
-(do (import x/tool/syntax) (import mk/syntax)
+(do (import x/tool/syntax) (import make/syntax)
     ((Syntax named (lit make)) spans "a:=b\nx y.o: z\n%.o:: %.c\n"))
 ```
 ---
@@ -73,7 +73,7 @@ is lexical, so of two targets only the one touching the colon colours.
 ### an expansion left open runs to the end
 
 ```make
-(do (import x/tool/syntax) (import mk/syntax)
+(do (import x/tool/syntax) (import make/syntax)
     (List map (fn (_ s) ((Syntax named (lit make)) spans s))
       (list "X = $(a" "X = ${a $(b)" "X = $")))
 ```
@@ -86,7 +86,7 @@ Spans walk back from a window's first line to one that is neither indented
 nor continued, so an expansion opened above colours the window's start.
 
 ```make
-(do (import x/tool/syntax) (import mk/syntax)
+(do (import x/tool/syntax) (import make/syntax)
     ((Syntax named (lit make)) spans "X = $(a \\\n  b\n  c) d\n" 14 6))
 ```
 ---
