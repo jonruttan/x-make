@@ -28,6 +28,14 @@ The expansion engine, pure: a vars box, text in, text out.
 ---
     cost $5
 
+### a dollar that ends the text stands for itself
+
+```make
+(do (def v (list ())) (display (mk-expand "cost $" v ())))
+```
+---
+    cost $
+
 ### the substitution reference, both spellings: each word's suffix replaced; an empty suffix appends
 
 ```make
