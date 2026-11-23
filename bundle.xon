@@ -1,9 +1,9 @@
-; lang.xon -- what this bundle IS.
+; bundle.xon -- what this bundle IS.
 
-(lang "make")
+(name "make")
 
 ; RADON: a make that cannot stat, read files, and run recipes is a
-; parser demo.  Deliberately SELF-CONTAINED -- no (requires-lang ...):
+; parser demo.  Deliberately SELF-CONTAINED -- no (requires-bundle ...):
 ; make is the bootstrap's root tool, and the root depends on nothing.
 ; HELIUM, plus exactly the libraries this bundle imports and nothing
 ; ambient.  Radon is only a particular set of libraries to load, and
@@ -13,15 +13,15 @@
 (dialect he)
 
 ; The x-lang release this bundle is built and tested against. v0.15.0 is the
-; floor: mk/prims.x fetches the string type's handle through
+; floor: make/prims.x fetches the string type's handle through
 ; (Type named ...), which no earlier release provides.
-(requires-release "v0.59.0")
+(requires-release "v0.61.0")
 
-(entry "run.x")
+(entry run)
 
-; The make grammar, for any process that colours a makefile: mk/syntax
+; The make grammar, for any process that colours a makefile: make/syntax
 ; imports x-lang libraries only, never the tool.  x/tool/syntax's catalogue,
 ; which reads this form, is in v0.43.0 and later.
-(grammar make (module mk/syntax)
+(grammar make (module make/syntax)
   (files ".mk" ".mak") (names "Makefile" "makefile" "GNUmakefile" "BSDmakefile")
   (interpreters "make"))

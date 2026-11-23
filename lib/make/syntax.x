@@ -1,6 +1,6 @@
 ; # x-make -- a make on x-lang
 ;
-; ## mk/syntax.x -- the make highlighting grammar
+; ## make/syntax.x -- the make highlighting grammar
 ;
 ; @description The grammar x/tool/syntax colours makefiles with: comments,
 ;   macro expansions, the directives as keywords, rule targets as classes,
@@ -9,7 +9,7 @@
 ; @copyright 2026 Jon Ruttan
 ; @license MIT No Attribution (MIT-0)
 ;
-; lang.xon's (grammar make ...) form names this module, and x/tool/syntax
+; bundle.xon's (grammar make ...) form names this module, and x/tool/syntax
 ; imports it the first time a file needs the grammar, in whatever process is
 ; colouring: vi's, a REPL's, an HTML renderer's.  So it imports x-lang
 ; libraries and never the tool.
@@ -22,7 +22,7 @@
 ; The directives are POSIX's and GNU's, so any makefile reads, not only the
 ; ones x-make runs.
 
-(module mk/syntax)
+(module make/syntax)
 (import x/type/list)
 (import x/reader/lexer)
 (import x/tool/syntax)
@@ -123,4 +123,4 @@
     (g sync %mk-syntax-sync)
     g))
 
-(provide mk/syntax mk-syntax-directives mk-syntax-special-targets)
+(provide make/syntax mk-syntax-directives mk-syntax-special-targets)

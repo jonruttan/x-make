@@ -1,15 +1,15 @@
 ; # x-make -- a make on x-lang
 ;
-; ## mk/base.x -- the tool, assembled
+; ## make/base.x -- the tool, assembled
 ;
 ; @author [Jon Ruttan](jonruttan@gmail.com)
 ; @copyright 2026 Jon Ruttan
 ; @license MIT No Attribution (MIT-0)
 
-(module mk/base)
-(import mk/cli mk-main mk-parse-cli mk-run)
-(import mk/parse mk-parse)
-(import mk/prims)
+(module make/base)
+(import make/cli mk-main mk-parse-cli mk-run)
+(import make/parse mk-parse)
+(import make/prims)
 
 (def make-version "0.1.0")
 
@@ -18,5 +18,5 @@
     (unless (null? result) (write result))
     (newline)))
 
-(provide mk/base
+(provide make/base
   make-repl-print make-version)

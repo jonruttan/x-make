@@ -1,20 +1,20 @@
-# Install copies this bundle to <share>/langs/make, where `x -l` looks: a lang
+# Install copies this bundle to <share>/bundles/make, where `x -l` looks: a lang
 # is installed when its files are there. No registry, no database.
 
 X ?= x
 
-# The version is derived from git describe, never committed: lang.xon declares
+# The version is derived from git describe, never committed: bundle.xon declares
 # what this lang requires; the installed artifact carries what it is.
 LANG_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 SHARE := $(if $(PREFIX),$(PREFIX)/share/x,$(shell $(X) --share-dir))
-DEST  := $(SHARE)/langs/make
+DEST  := $(SHARE)/bundles/make
 
-# What a consumer needs to RUN the lang: the declaration, the entry, the
-# modules.  Not the suite, not the tooling, not CI.
-PAYLOAD := lang.xon run.x mk
+# What a consumer needs to RUN the bundle: the declaration and lib/, which
+# holds the entry and the modules.  Not the suite, not the tooling, not CI.
+PAYLOAD := bundle.xon lib
 
 .PHONY: install
-install: ## Install into <share>/langs/make
+install: ## Install into <share>/bundles/make
 	@test -n "$(SHARE)" || { echo "x-make: cannot find an x tree -- set PREFIX or X" >&2; exit 1; }
 	@test -d "$(SHARE)" || { echo "x-make: no x tree at $(SHARE)" >&2; exit 1; }
 	rm -rf "$(DEST)"
@@ -40,13 +40,13 @@ check: ## Run the suite against tests/contract/known-failures.txt -- what CI gat
 	X="$(X)" sh tests/spec-gate.sh
 
 # The card runs from here, so X is an installed x: a checkout's wrapper runs
-# only from its own root.  X_LANG_DIR is the directory holding this bundle,
+# only from its own root.  X_BUNDLE_DIR is the directory holding this bundle,
 # so `x -l make` loads this tree and not an installed copy.  CARD_SH is the
 # check: the installed x-lang's, or a newer one named here.
 .PHONY: card
 card: ## Hold docs/card.md to the card format and run its makefiles
-	X_LANG_DIR="$${X_LANG_DIR:-$(CURDIR)/..}" BUNDLE=. X="$(X)" \
-		sh "$${CARD_SH:-$$("$(X)" --share-dir)/tools/lang-kit/card.sh}"
+	X_BUNDLE_DIR="$${X_BUNDLE_DIR:-$(CURDIR)/..}" BUNDLE=. X="$(X)" \
+		sh "$${CARD_SH:-$$("$(X)" --share-dir)/tools/bundle-kit/card.sh}"
 
 .PHONY: help
 help: ## Show targets

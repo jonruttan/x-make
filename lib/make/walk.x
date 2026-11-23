@@ -1,6 +1,6 @@
 ; # x-make -- a make on x-lang
 ;
-; ## mk/run.x -- the DAG walk, recipes, the command line
+; ## make/walk.x -- the DAG walk, recipes, the command line
 ;
 ; @author [Jon Ruttan](jonruttan@gmail.com)
 ; @copyright 2026 Jon Ruttan
@@ -19,10 +19,10 @@
 ; silence every one), - forgives the status (-i forgives every one).
 ; Automatic variables: $@ $< $^ $* $?.
 
-(module mk/run)
-(import mk/expand
+(module make/walk)
+(import make/expand
   mk-cwd mk-expand mk-find mk-join mk-path mk-subst mk-trim)
-(import mk/prims
+(import make/prims
   append byte-at byte-len file-exists? file-stat-mtime filter
   map proc-run string-append string=? substring)
 ; a sweep of what is not live; the engine collects at no other time
@@ -342,6 +342,6 @@
                 (self (rest rs))))))))
     (go rules)))
 
-(provide mk/run
+(provide make/walk
   mk-build mk-default-goal mk-dry mk-dry! mk-ignore! mk-keep mk-keep!
   mk-quiet mk-quiet! mk-silent! mk-suffixes!)

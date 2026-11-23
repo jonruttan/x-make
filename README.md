@@ -17,7 +17,7 @@ one does, the Makefile moves, not this make.
 
 ## Status
 
-No release has been cut. Paired with x-lang v0.59.0 (`lang.xon` is the
+No release has been cut. Paired with x-lang v0.59.0 (`bundle.xon` is the
 checkable row).
 
 ## What it does
@@ -72,7 +72,7 @@ These are read, and a Makefile in this project does not use them:
 
 ## Install
 
-It needs x-lang at the release `lang.xon` declares.
+It needs x-lang at the release `bundle.xon` declares.
 
     make install        # into the x on PATH, with the make already there
 
@@ -97,16 +97,16 @@ expansion the suite calls directly.
 
 ## Layout
 
-    lang.xon          what the bundle is: lang, dialect, pairing, entry
-    run.x             the entry
-    mk/base.x         the parts, assembled
-    mk/prims.x        the platform layer
-    mk/expand.x       $(...) expansion: variables, automatics, functions
-    mk/parse.x        the line interpreter: conditionals, assignments, rules
-    mk/run.x          the graph walk, modification times, recipes
-    mk/cli.x          options, overrides, and mk-main
-    mk/syntax.x       the make highlighting grammar, for x/tool/syntax
-    tests/            markdown specs, run by the platform's runner
+    bundle.xon            what the bundle is: name, dialect, release, entry
+    lib/make/run.x        the entry
+    lib/make/base.x       the parts, assembled
+    lib/make/prims.x      the platform layer
+    lib/make/expand.x     $(...) expansion: variables, automatics, functions
+    lib/make/parse.x      the line interpreter: conditionals, assignments, rules
+    lib/make/walk.x       the graph walk, modification times, recipes
+    lib/make/cli.x        options, overrides, and mk-main
+    lib/make/syntax.x     the make highlighting grammar, for x/tool/syntax
+    tests/                markdown specs, run by the platform's runner
 
 ## Licence
 

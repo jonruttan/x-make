@@ -1,6 +1,6 @@
 ; # x-make -- a make on x-lang
 ;
-; ## mk/cli.x -- the command line
+; ## make/cli.x -- the command line
 ;
 ; @author [Jon Ruttan](jonruttan@gmail.com)
 ; @copyright 2026 Jon Ruttan
@@ -13,14 +13,14 @@
 ; place options after the first target.  Statuses: 0 built or up to
 ; date, 2 anything failed -- GNU's own reading.
 
-(module mk/cli)
-(import mk/expand mk-cwd mk-cwd! mk-find mk-path mk-top-at mk-var-set!)
-(import mk/parse mk-parse)
-(import mk/prims
+(module make/cli)
+(import make/expand mk-cwd mk-cwd! mk-find mk-path mk-top-at mk-var-set!)
+(import make/parse mk-parse)
+(import make/prims
   byte-at byte-len file-exists? file-read-all file-write-all reverse
   set-first! string-append string-concat string=? substring sys-environ
   sys-exit)
-(import mk/run
+(import make/walk
   mk-build mk-default-goal mk-dry mk-dry! mk-ignore! mk-keep mk-keep!
   mk-quiet mk-quiet! mk-silent! mk-suffixes!)
 
@@ -239,5 +239,5 @@
   (fn (_ operands)
     (sys-exit (mk-run operands))))
 
-(provide mk/cli
+(provide make/cli
   mk-main mk-parse-cli mk-run)

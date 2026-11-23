@@ -1,6 +1,6 @@
 ; # x-make -- a make on x-lang
 ;
-; ## mk/expand.x -- $(...) expansion
+; ## make/expand.x -- $(...) expansion
 ;
 ; @author [Jon Ruttan](jonruttan@gmail.com)
 ; @copyright 2026 Jon Ruttan
@@ -18,8 +18,8 @@
 ; the -C prefix (there is no chdir anywhere in this bundle: commands run
 ; under `cd PREFIX &&` and paths join it).
 
-(module mk/expand)
-(import mk/prims
+(module make/expand)
+(import make/prims
   append byte-at byte-len file-dir? file-exists? file-list-dir filter
   integer->char lexer-escape lexer-make lexer-nested lexer-read
   lexer-run lexer-skip lexer-table lexer-word list->string map
@@ -63,7 +63,7 @@
 ; a list, an argument list split at its top-level commas, a rule line split
 ; at its first top-level colon, a makefile folded into lines -- was a byte
 ; walk in x at 40 to 80 us a byte.  Each is a rule set the platform's lexer
-; reads as native code (mk/prims.x's lexer seam), made on first use and kept.
+; reads as native code (make/prims.x's lexer seam), made on first use and kept.
 ; What the rules leave to the walk over the tokens: an empty piece between
 ; two separators, and whether a separator closed the last piece.
 ;
@@ -642,7 +642,7 @@
     (if (= (byte-len text) 0) text
       (go (lexer-read (%mk-lx-expand) text) ()))))
 
-(provide mk/expand
+(provide make/expand
   mk-args mk-cwd mk-expand mk-find mk-join mk-lx-lines-cell mk-lx-split
   mk-pat-stem mk-path mk-pieces mk-shell-capture mk-subst mk-top-at
   mk-trim mk-var-append! mk-var-entry mk-var-set! mk-words mk-ws? mk-cwd!)
