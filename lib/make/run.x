@@ -13,7 +13,8 @@
 ;   x -l make -- [-C dir] [-f makefile] [-eikns] [VAR=value]... [target]...
 ;
 ; The module make/run.  Importing it sets the session's globals; main runs
-; mk-main on the operands, and with none the session goes on to the REPL.
+; mk-main on the operands.  With none it brings the makefile's first target
+; up to date, as POSIX make does: a recipe's bare $(MAKE) is that call.
 (module make/run)
 (import make/base make-repl-print make-version)
 (import make/cli mk-main)
@@ -24,7 +25,6 @@
 
 (def main
   (fn (_)
-    (let ((ops (rest (Sys args (lit program)))))
-      (unless (null? ops) (mk-main ops)))))
+    (mk-main (rest (Sys args (lit program))))))
 
 (provide make/run main)
