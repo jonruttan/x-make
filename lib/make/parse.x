@@ -40,19 +40,20 @@
   append byte-at byte-len file-exists? file-read-all lexer-escape
   lexer-make lexer-read lexer-run lexer-table map reverse set-first!
   string-append string-concat string=? substring)
+; a backslash that ends the text continues the line, as a backslash-newline
+; does
 (def %mk-lx-lines
   (fn (_)
     (if (null? (first mk-lx-lines-cell))
       (set-first! mk-lx-lines-cell
         (lexer-make
           (list
-            (lexer-table (lit cont) (list "\\\n"))
+            (lexer-table (lit cont) (list "\\\n" "\\"))
             (lexer-table (lit nl) (list "\n"))
             (lexer-escape (lit esc) 92)
             (lexer-run (lit txt)
               (list (pair 0 9) (pair 11 91) (pair 93 255) (pair -128 -1))
-              (list (pair 0 9) (pair 11 91) (pair 93 255) (pair -128 -1))))
-          "\n"))
+              (list (pair 0 9) (pair 11 91) (pair 93 255) (pair -128 -1))))))
       ())
     (first mk-lx-lines-cell)))
 

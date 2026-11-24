@@ -66,10 +66,6 @@
 ; reads as native code (make/prims.x's lexer seam), made on first use and kept.
 ; What the rules leave to the walk over the tokens: an empty piece between
 ; two separators, and whether a separator closed the last piece.
-;
-; The end text appended to every read is chosen outside the run rule's class
-; so that it ends a run and is itself no token: $ for an expansion, the
-; separator for a split, a newline for lines.
 
 (def %mk-lx-expand-cell (pair () ()))
 (def %mk-lx-words-cell (pair () ()))
@@ -84,21 +80,21 @@
   (list (pair 0 8) (pair 11 31) (pair 33 255) (pair -128 -1)))
 
 ; $$, $(...) and ${...} with their own kind of bracket nested inside, $X,
-; and a run of anything else; a reference left open runs to the end
+; and a run of anything else; a reference left open runs to the end, and a $
+; that ends the text stands for itself, as $$ does
 (def %mk-lx-expand
   (fn (_)
     (if (null? (first %mk-lx-expand-cell))
       (set-first! %mk-lx-expand-cell
         (lexer-make
           (list
-            (lexer-table (lit dd) (list "$$"))
+            (lexer-table (lit dd) (list "$$" "$"))
             (lexer-nested (lit ref) "$(" (lit p)
               (list (list (lit p) 41 () (list (pair "(" (lit p))))))
             (lexer-nested (lit bref) "${" (lit b)
               (list (list (lit b) 125 () (list (pair "{" (lit b))))))
             (lexer-escape (lit one) 36)
-            (lexer-run (lit txt) (%mk-class-but 36) (%mk-class-but 36)))
-          "$"))
+            (lexer-run (lit txt) (%mk-class-but 36) (%mk-class-but 36)))))
       ())
     (first %mk-lx-expand-cell)))
 
@@ -108,8 +104,7 @@
       (set-first! %mk-lx-words-cell
         (lexer-make
           (list (lexer-skip " \t\n")
-                (lexer-run (lit w) %mk-nonblank %mk-nonblank))
-          " "))
+                (lexer-run (lit w) %mk-nonblank %mk-nonblank))))
       ())
     (first %mk-lx-words-cell)))
 
@@ -132,8 +127,7 @@
                            (list (lit a) () () (list (pair "(" (lit p)) (pair "{" (lit b))))
                            (list (lit p) 41 () (list (pair "(" (lit p))))
                            (list (lit b) 125 () (list (pair "{" (lit b)))))
-                         sep))
-                     sep)))
+                         sep)))))
             (set-first! %mk-lx-splits (pair (pair b l) (first %mk-lx-splits)))
             l))
         hit))))

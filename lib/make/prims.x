@@ -85,7 +85,7 @@
 ; analysers native code.  make/expand.x makes each once and keeps it.  A nested
 ; span or a word still open at the end of the text is a token all the same.
 (import x/reader/lexer)
-(def lexer-make (fn (_ rules end) (Lexer make rules end)))
+(def lexer-make (fn (_ rules) (Lexer make rules)))
 (def lexer-run (fn (_ tag opens continues) (Lexer run tag opens continues)))
 (def lexer-skip (fn (_ class) (Lexer skip class)))
 (def lexer-table (fn (_ tag strings) (Lexer table tag strings)))
